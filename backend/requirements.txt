@@ -3,3 +3,7 @@ uvicorn
 requests
 beautifulsoup4
 PyPDF2
+python-multipart
+haystack-ai
+elasticsearch
+sentence-transformers

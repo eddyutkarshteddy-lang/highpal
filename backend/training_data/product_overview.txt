@@ -1,0 +1,18 @@
+HighPal is an enterprise-grade document processing and question-answering system built with modern AI technologies. 
+
+Key Features:
+- Advanced document processing using Haystack framework
+- Semantic search powered by Elasticsearch 
+- Support for PDF uploads and web content extraction
+- BM25 retrieval algorithm for intelligent document search
+- Fallback storage mechanisms for reliability
+- No dependency on external AI services like OpenAI
+
+Technical Architecture:
+- Backend: FastAPI with Python
+- Frontend: React with Vite
+- Search: Elasticsearch with Haystack integration
+- Embeddings: SentenceTransformers (all-MiniLM-L6-v2)
+- Document Store: ElasticsearchDocumentStore
+
+The system is designed for scalability and can handle large document collections while providing fast, accurate search results.

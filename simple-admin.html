@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HighPal Admin - Training Data Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .btn {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        .btn:hover {
+            background: #3730a3;
+        }
+        
+        .btn-success { background: #059669; }
+        .btn-danger { background: #dc2626; }
+        .btn-info { background: #0ea5e9; }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .success { background: #dcfce7; color: #166534; }
+        .error { background: #fef2f2; color: #dc2626; }
+        .info { background: #dbeafe; color: #1e40af; }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            flex: 1;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #4f46e5;
+        }
+        
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 HighPal Admin Panel</h1>
+        <p>Training Data Management System</p>
+    </div>
+    
+    <!-- Authentication -->
+    <div class="section">
+        <h2>🔐 Admin Authentication</h2>
+        <input type="password" id="adminKey" placeholder="Enter admin key" value="your_secure_admin_key_2025!">
+        <button class="btn" onclick="authenticate()">Authenticate</button>
+        <button class="btn btn-info" onclick="testConnection()">Test Connection</button>
+        <div id="authStatus"></div>
+    </div>
+    
+    <!-- Main Panel -->
+    <div id="adminPanel" class="hidden">
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-number" id="totalDocs">-</div>
+                <div>Total Documents</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalCategories">-</div>
+                <div>Categories</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="backendStatus">-</div>
+                <div>Backend Status</div>
+            </div>
+        </div>
+        
+        <!-- Upload PDF -->
+        <div class="section">
+            <h2>📄 Upload Training PDF</h2>
+            <div id="pdfStatus"></div>
+            <input type="file" id="pdfFile" accept=".pdf">
+            <select id="pdfCategory">
+                <option value="product_info">Product Information</option>
+                <option value="technical_docs">Technical Documentation</option>
+                <option value="faq">FAQ</option>
+                <option value="user_guides">User Guides</option>
+            </select>
+            <button class="btn" onclick="uploadPDF()">Upload PDF</button>
+        </div>
+        
+        <!-- Add URL -->
+        <div class="section">
+            <h2>🌐 Add Training URL</h2>
+            <div id="urlStatus"></div>
+            <input type="text" id="trainingUrl" placeholder="https://example.com/article">
+            <select id="urlCategory">
+                <option value="product_info">Product Information</option>
+                <option value="technical_docs">Technical Documentation</option>
+                <option value="faq">FAQ</option>
+                <option value="user_guides">User Guides</option>
+            </select>
+            <button class="btn" onclick="addURL()">Add URL</button>
+        </div>
+        
+        <!-- Management -->
+        <div class="section">
+            <h2>🔧 Management</h2>
+            <button class="btn btn-info" onclick="loadStats()">Refresh Stats</button>
+            <button class="btn btn-info" onclick="viewData()">View Data</button>
+            <button class="btn btn-danger" onclick="clearData()">Clear All Data</button>
+            <div id="dataList"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8001';
+        let authenticated = false;
+        let adminKey = '';
+
+        function showStatus(type, message, elementId) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => statusDiv.innerHTML = '', 5000);
+        }
+
+        async function testConnection() {
+            try {
+                showStatus('info', 'Testing connection...', 'authStatus');
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('success', `✅ Backend connected! ${data.message}`, 'authStatus');
+                } else {
+                    showStatus('error', `❌ Backend error: ${response.status}`, 'authStatus');
+                }
+            } catch (error) {
+                showStatus('error', `❌ Connection failed: ${error.message}`, 'authStatus');
+            }
+        }
+
+        function authenticate() {
+            adminKey = document.getElementById('adminKey').value;
+            if (adminKey) {
+                authenticated = true;
+                document.getElementById('adminPanel').classList.remove('hidden');
+                showStatus('success', '✅ Authenticated successfully!', 'authStatus');
+                loadStats();
+            } else {
+                showStatus('error', '❌ Please enter admin key', 'authStatus');
+            }
+        }
+
+        async function loadStats() {
+            if (!authenticated) return;
+            try {
+                const response = await fetch(`${API_BASE}/admin/training_data/?admin_key=${adminKey}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('totalDocs').textContent = data.total_training_docs;
+                    document.getElementById('totalCategories').textContent = Object.keys(data.categories).length;
+                    document.getElementById('backendStatus').textContent = '✅';
+                    showStatus('success', '✅ Stats updated!', 'authStatus');
+                } else {
+                    showStatus('error', `❌ Failed to load stats: ${response.status}`, 'authStatus');
+                }
+            } catch (error) {
+                showStatus('error', `❌ Stats error: ${error.message}`, 'authStatus');
+            }
+        }
+
+        async function uploadPDF() {
+            if (!authenticated) return;
+            const fileInput = document.getElementById('pdfFile');
+            const category = document.getElementById('pdfCategory').value;
+            
+            if (!fileInput.files.length) {
+                showStatus('error', '❌ Please select a PDF file', 'pdfStatus');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('category', category);
+            formData.append('admin_key', adminKey);
+
+            try {
+                showStatus('info', 'Uploading PDF...', 'pdfStatus');
+                const response = await fetch(`${API_BASE}/admin/upload_training_pdf/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus('success', `✅ PDF uploaded! ${result.message}`, 'pdfStatus');
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showStatus('error', `❌ Upload failed: ${error.detail}`, 'pdfStatus');
+                }
+            } catch (error) {
+                showStatus('error', `❌ Upload error: ${error.message}`, 'pdfStatus');
+            }
+        }
+
+        async function addURL() {
+            if (!authenticated) return;
+            const url = document.getElementById('trainingUrl').value;
+            const category = document.getElementById('urlCategory').value;
+            
+            if (!url) {
+                showStatus('error', '❌ Please enter a URL', 'urlStatus');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('url', url);
+            formData.append('category', category);
+            formData.append('admin_key', adminKey);
+
+            try {
+                showStatus('info', 'Processing URL...', 'urlStatus');
+                const response = await fetch(`${API_BASE}/admin/add_training_url/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus('success', `✅ URL added! ${result.message}`, 'urlStatus');
+                    loadStats();
+                } else {
+                    const error = await response.json();
+                    showStatus('error', `❌ URL failed: ${error.detail}`, 'urlStatus');
+                }
+            } catch (error) {
+                showStatus('error', `❌ URL error: ${error.message}`, 'urlStatus');
+            }
+        }
+
+        async function viewData() {
+            if (!authenticated) return;
+            try {
+                const response = await fetch(`${API_BASE}/admin/training_data/?admin_key=${adminKey}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    let html = '<h3>Training Data:</h3><ul>';
+                    data.training_documents.forEach(doc => {
+                        html += `<li><strong>${doc.filename || doc.url}</strong> (${doc.category}) - ${doc.content_length} chars</li>`;
+                    });
+                    html += '</ul>';
+                    document.getElementById('dataList').innerHTML = html;
+                }
+            } catch (error) {
+                showStatus('error', `❌ View error: ${error.message}`, 'authStatus');
+            }
+        }
+
+        async function clearData() {
+            if (!authenticated) return;
+            if (!confirm('Are you sure you want to clear all training data?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/admin/clear_training_data/?admin_key=${adminKey}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    const result = await response.json();
+                    showStatus('success', `✅ ${result.message}`, 'authStatus');
+                    loadStats();
+                    document.getElementById('dataList').innerHTML = '';
+                }
+            } catch (error) {
+                showStatus('error', `❌ Clear error: ${error.message}`, 'authStatus');
+            }
+        }
+
+        // Auto-test connection on load
+        window.onload = function() {
+            console.log('Page loaded, testing connection...');
+            testConnection();
+        };
+    </script>
+</body>
+</html>

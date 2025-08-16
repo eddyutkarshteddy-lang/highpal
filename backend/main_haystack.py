@@ -15,15 +15,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Haystack imports with proper error handling
-HAYSTACK_AVAILABLE = False
-Document = None
-Pipeline = None
-DocumentWriter = None
-SentenceTransformersDocumentEmbedder = None
-SentenceTransformersTextEmbedder = None
-ElasticsearchBM25Retriever = None
-ElasticsearchDocumentStore = None
-
 try:
     from haystack import Document, Pipeline
     from haystack.components.writers import DocumentWriter
@@ -34,7 +25,6 @@ try:
     logger.info("✅ Haystack components loaded successfully")
 except ImportError as e:
     logger.warning(f"⚠️ Haystack not available: {e}")
-    logger.info("🔄 Server will run in fallback mode without Haystack")
     HAYSTACK_AVAILABLE = False
 
 app = FastAPI(title="HighPal Document Assistant", description="AI-powered document processing with Haystack + Elasticsearch")
@@ -72,21 +62,18 @@ if HAYSTACK_AVAILABLE:
         indexing_pipeline.add_component("writer", DocumentWriter(document_store=document_store))
         indexing_pipeline.connect("embedder.documents", "writer.documents")
         
-        # Create retrieval pipeline  
+        # Create retrieval pipeline (BM25 for text search)
         retrieval_pipeline = Pipeline()
-        retrieval_pipeline.add_component("retriever", ElasticsearchBM25Retriever(document_store=document_store))
-        retrieval_pipeline.add_component("text_embedder", text_embedder)
-        retrieval_pipeline.connect("text_embedder", "retriever")
+        retriever = ElasticsearchBM25Retriever(document_store=document_store)
+        retrieval_pipeline.add_component("retriever", retriever)
         
         logger.info("✅ Haystack pipelines initialized successfully")
         
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Haystack components: {e}")
+        logger.warning(f"⚠️ Failed to initialize Elasticsearch/Haystack: {e}")
         document_store = None
         indexing_pipeline = None
         retrieval_pipeline = None
-else:
-    logger.info("🔄 Running in fallback mode - Haystack components not available")
 
 @app.get("/health")
 async def health_check():
@@ -429,225 +416,6 @@ async def list_documents():
             logger.error(f"Error listing Elasticsearch documents: {e}")
     
     return JSONResponse({"documents": docs})
-
-# Admin endpoints for training data management
-ADMIN_KEY = os.getenv("ADMIN_KEY", "admin123")  # Change this in production!
-
-@app.post("/admin/upload_training_pdf/")
-async def admin_upload_training_pdf(
-    file: UploadFile = File(...), 
-    category: str = Form(...),
-    admin_key: str = Form(...)
-):
-    """Admin endpoint to upload PDF as training data"""
-    if admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    try:
-        content = await file.read()
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() or ""
-        
-        # Create document ID from file content hash
-        doc_id = hashlib.md5(content).hexdigest()
-        
-        # Store in fallback storage with training data marker
-        stored_documents[doc_id] = {
-            "filename": file.filename,
-            "content": text,
-            "source": "training_data",
-            "category": category,
-            "admin_added": True
-        }
-        
-        indexed = False
-        
-        # Index with Haystack if available
-        if indexing_pipeline and text.strip():
-            try:
-                document = Document(
-                    content=text,
-                    meta={
-                        "filename": file.filename,
-                        "doc_id": doc_id,
-                        "source": "training_data",
-                        "category": category,
-                        "type": "knowledge_base",
-                        "admin_added": True
-                    }
-                )
-                
-                indexing_pipeline.run({"embedder": {"documents": [document]}})
-                indexed = True
-                logger.info(f"✅ Indexed training document: {file.filename} in category: {category}")
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to index training document: {e}")
-        
-        return JSONResponse({
-            "message": f"Training document uploaded successfully",
-            "filename": file.filename,
-            "category": category,
-            "indexed": indexed,
-            "character_count": len(text),
-            "doc_id": doc_id
-        })
-    
-    except Exception as e:
-        logger.error(f"Error processing training PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing training PDF: {str(e)}")
-
-@app.post("/admin/add_training_url/")
-async def admin_add_training_url(
-    url: str = Form(...),
-    category: str = Form(...),
-    admin_key: str = Form(...)
-):
-    """Admin endpoint to fetch URL as training data"""
-    if admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        text = soup.get_text(strip=True, separator=' ')
-        
-        # Create document ID from URL
-        doc_id = hashlib.md5(url.encode()).hexdigest()
-        
-        # Store in fallback storage with training data marker
-        stored_documents[doc_id] = {
-            "url": url,
-            "content": text,
-            "source": "training_data",
-            "category": category,
-            "title": soup.title.string if soup.title else "No title",
-            "admin_added": True
-        }
-        
-        indexed = False
-        
-        # Index with Haystack if available
-        if indexing_pipeline and text.strip():
-            try:
-                document = Document(
-                    content=text,
-                    meta={
-                        "url": url,
-                        "doc_id": doc_id,
-                        "source": "training_data",
-                        "category": category,
-                        "type": "knowledge_base",
-                        "title": soup.title.string if soup.title else "No title",
-                        "admin_added": True
-                    }
-                )
-                
-                indexing_pipeline.run({"embedder": {"documents": [document]}})
-                indexed = True
-                logger.info(f"✅ Indexed training URL: {url} in category: {category}")
-                
-            except Exception as e:
-                logger.error(f"❌ Failed to index training URL: {e}")
-        
-        return JSONResponse({
-            "message": "Training URL processed successfully",
-            "url": url,
-            "category": category,
-            "indexed": indexed,
-            "character_count": len(text),
-            "title": soup.title.string if soup.title else "No title",
-            "doc_id": doc_id
-        })
-    
-    except requests.RequestException as e:
-        logger.error(f"Error fetching training URL {url}: {e}")
-        raise HTTPException(status_code=400, detail=f"Error fetching training URL: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error processing training URL content: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing training content: {str(e)}")
-
-@app.get("/admin/training_data/")
-async def admin_list_training_data(admin_key: str):
-    """Admin endpoint to list all training data"""
-    if admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    training_docs = []
-    categories = {}
-    
-    # From fallback storage
-    for doc_id, doc_data in stored_documents.items():
-        if doc_data.get("source") == "training_data":
-            category = doc_data.get("category", "unknown")
-            categories[category] = categories.get(category, 0) + 1
-            
-            training_docs.append({
-                "doc_id": doc_id,
-                "filename": doc_data.get("filename"),
-                "url": doc_data.get("url"),
-                "category": category,
-                "content_length": len(doc_data.get("content", "")),
-                "title": doc_data.get("title"),
-                "storage": "fallback"
-            })
-    
-    # From Elasticsearch (if available)
-    if document_store:
-        try:
-            es_docs = document_store.filter_documents(filters={"source": "training_data"})
-            for doc in es_docs:
-                category = doc.meta.get("category", "unknown")
-                categories[category] = categories.get(category, 0) + 1
-                
-                training_docs.append({
-                    "doc_id": doc.meta.get("doc_id"),
-                    "filename": doc.meta.get("filename"),
-                    "url": doc.meta.get("url"),
-                    "category": category,
-                    "content_length": len(doc.content),
-                    "title": doc.meta.get("title"),
-                    "storage": "elasticsearch"
-                })
-        except Exception as e:
-            logger.error(f"Error listing Elasticsearch training data: {e}")
-    
-    return JSONResponse({
-        "training_documents": training_docs,
-        "categories": categories,
-        "total_training_docs": len(training_docs)
-    })
-
-@app.delete("/admin/clear_training_data/")
-async def admin_clear_training_data(admin_key: str):
-    """Admin endpoint to clear only training data (keeps user documents)"""
-    if admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    global stored_documents
-    
-    # Clear training data from fallback storage
-    stored_documents = {k: v for k, v in stored_documents.items() 
-                      if v.get("source") != "training_data"}
-    
-    # Clear training data from Elasticsearch
-    elasticsearch_cleared = False
-    if document_store:
-        try:
-            document_store.delete_documents(filters={"source": "training_data"})
-            elasticsearch_cleared = True
-            logger.info("✅ Cleared training data from Elasticsearch")
-        except Exception as e:
-            logger.error(f"Error clearing training data from Elasticsearch: {e}")
-    
-    return JSONResponse({
-        "message": "Training data cleared successfully",
-        "elasticsearch_cleared": elasticsearch_cleared,
-        "fallback_cleared": True
-    })
 
 if __name__ == "__main__":
     import uvicorn

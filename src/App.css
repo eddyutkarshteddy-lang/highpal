@@ -1,54 +1,258 @@
 
-#root {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
+.App {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
-.container {
-  width: 100vw;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background: #fff;
+.app-header {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 10px;
 }
 
 .logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+  height: 60px;
+  margin-bottom: 10px;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+.app-header h1 {
+  margin: 10px 0;
+  font-size: 2.5rem;
+}
+
+.app-header p {
+  margin: 0;
+  opacity: 0.9;
+}
+
+.health-status {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border-left: 4px solid #28a745;
+}
+
+.health-status h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.status.healthy {
+  color: #28a745;
+}
+
+.status.error {
+  color: #dc3545;
+}
+
+.features {
+  margin-top: 10px;
+}
+
+.features small {
+  color: #666;
+}
+
+.upload-section, .question-section {
+  background: white;
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
+}
+
+.upload-section h3, .question-section h3 {
+  margin-top: 0;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upload-controls {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.upload-controls input[type="file"] {
+  flex: 1;
+  padding: 10px;
+  border: 2px dashed #ddd;
+  border-radius: 5px;
+  background: #fafafa;
+}
+
+.upload-controls button {
+  padding: 10px 20px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.upload-controls button:hover {
+  background: #0056b3;
+}
+
+.upload-controls button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.uploaded-preview {
+  background: #e8f4f8;
+  padding: 15px;
+  border-radius: 5px;
+  border-left: 4px solid #17a2b8;
+}
+
+.uploaded-preview h4 {
+  margin-top: 0;
+  color: #0c5460;
+}
+
+.uploaded-preview small {
+  color: #666;
+}
+
+.question-input {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.question-input input {
+  flex: 1;
+  padding: 15px;
+  border: 2px solid #ddd;
+  border-radius: 25px;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.3s;
+}
+
+.question-input input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.get-answer-btn {
+  padding: 15px 30px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.get-answer-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+}
+
+.get-answer-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.answer-section {
+  background: #e8f5e8;
+  padding: 25px;
+  border-radius: 10px;
+  border-left: 4px solid #28a745;
+  margin-bottom: 20px;
+}
+
+.answer-section h3 {
+  margin-top: 0;
+  color: #155724;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.answer-content {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #c3e6cb;
+}
+
+.answer-content p {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.instructions {
+  background: #fff3cd;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+}
+
+.instructions h3 {
+  margin-top: 0;
+  color: #856404;
+}
+
+.instructions ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.instructions li {
+  margin-bottom: 8px;
+  color: #856404;
+}
+
+.instructions strong {
+  color: #533f03;
+}
+
+/* Loading states */
+.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .App {
+    padding: 10px;
   }
-  to {
-    transform: rotate(360deg);
+  
+  .upload-controls {
+    flex-direction: column;
+    align-items: stretch;
   }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
+  
+  .question-input {
+    flex-direction: column;
+    align-items: stretch;
   }
-}
-
-.card {
-  padding: 2em;
-}
-
-.read-the-docs {
-  color: #888;
+  
+  .question-input input {
+    margin-bottom: 10px;
+  }
+  
+  .get-answer-btn {
+    border-radius: 8px;
+  }
 }

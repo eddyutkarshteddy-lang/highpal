@@ -1,0 +1,19 @@
+{
+  "faq": [
+    {
+      "question": "What is HighPal?",
+      "answer": "HighPal is an AI-powered document assistant that helps you process PDFs, fetch web content, and get intelligent answers using advanced semantic search with Haystack and Elasticsearch.",
+      "category": "product_info"
+    },
+    {
+      "question": "How does document indexing work?",
+      "answer": "HighPal uses SentenceTransformers to create embeddings of your documents and stores them in Elasticsearch. This enables semantic search where you can find relevant information even if the exact keywords don't match.",
+      "category": "technical_info"
+    },
+    {
+      "question": "What file formats are supported?",
+      "answer": "Currently HighPal supports PDF files for upload and can fetch content from any web URL. The system extracts text content and indexes it for search.",
+      "category": "features"
+    }
+  ]
+}

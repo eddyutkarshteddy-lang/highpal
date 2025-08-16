@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HighPal Admin Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .btn { background: #4f46e5; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background: #dcfce7; color: #166534; }
+        .error { background: #fef2f2; color: #dc2626; }
+        .info { background: #dbeafe; color: #1e40af; }
+    </style>
+</head>
+<body>
+    <h1>🎯 HighPal Admin - Simple Test</h1>
+    <p>This is a simplified admin interface to test connectivity.</p>
+    
+    <div id="status"></div>
+    
+    <button class="btn" onclick="testBackend()">Test Backend Connection</button>
+    <button class="btn" onclick="testHealth()">Test Health Endpoint</button>
+    
+    <h3>Backend Status:</h3>
+    <div id="backendInfo">
+        <p><strong>Backend URL:</strong> http://127.0.0.1:8001</p>
+        <p><strong>Status:</strong> <span id="connectionStatus">Not tested</span></p>
+    </div>
+
+    <script>
+        function showStatus(type, message) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        async function testBackend() {
+            showStatus('info', 'Testing backend connection...');
+            console.log('Testing backend at: http://127.0.0.1:8001');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8001/health');
+                console.log('Response:', response);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Data:', data);
+                    showStatus('success', `✅ Backend is running! Response: ${JSON.stringify(data)}`);
+                    document.getElementById('connectionStatus').textContent = '✅ Connected';
+                } else {
+                    showStatus('error', `❌ Backend returned status: ${response.status}`);
+                    document.getElementById('connectionStatus').textContent = '❌ Error';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus('error', `❌ Connection failed: ${error.message}`);
+                document.getElementById('connectionStatus').textContent = '❌ Failed';
+            }
+        }
+
+        async function testHealth() {
+            showStatus('info', 'Testing health endpoint...');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8001/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showStatus('success', `✅ Health check passed: ${JSON.stringify(data, null, 2)}`);
+                } else {
+                    const errorText = await response.text();
+                    showStatus('error', `❌ Health check failed: ${response.status} - ${errorText}`);
+                }
+            } catch (error) {
+                showStatus('error', `❌ Health check error: ${error.message}`);
+            }
+        }
+
+        // Auto-test on page load
+        window.onload = function() {
+            console.log('Page loaded, testing backend...');
+            testBackend();
+        };
+    </script>
+</body>
+</html>

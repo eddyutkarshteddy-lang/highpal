@@ -1,0 +1,32 @@
+Technical Implementation Details for HighPal:
+
+Haystack Integration:
+- Uses haystack-ai package for document processing
+- ElasticsearchDocumentStore for persistent storage
+- SentenceTransformersDocumentEmbedder for creating document embeddings
+- ElasticsearchBM25Retriever for text-based search
+- Pipeline architecture for modular processing
+
+Elasticsearch Configuration:
+- Default host: http://localhost:9200
+- Index name: highpal_documents
+- Document storage with metadata and embeddings
+- BM25 scoring for relevance ranking
+
+Document Processing Flow:
+1. Document upload (PDF) or URL fetch
+2. Text extraction using PyPDF2 or BeautifulSoup
+3. Document embedding generation
+4. Storage in Elasticsearch with metadata
+5. Indexing for fast retrieval
+
+Search and Retrieval:
+- BM25 algorithm for keyword-based search
+- Semantic similarity using embeddings
+- Top-k retrieval (default: 3 documents)
+- Fallback to keyword matching when needed
+
+Error Handling:
+- Graceful degradation when Elasticsearch unavailable
+- Fallback to in-memory storage
+- Comprehensive logging and error reporting
