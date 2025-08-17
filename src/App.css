@@ -6,6 +6,41 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
 }
 
+/* Loading spinner animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 2px dashed #e2e8f0;
+}
+
+.loading-spinner {
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #6366f1;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin-bottom: 15px;
+}
+
+.loading-text {
+  font-size: 16px;
+  font-weight: bold;
+  color: #6366f1;
+  margin: 10px 0;
+  text-align: center;
+}
+
 .app-header {
   text-align: center;
   margin-bottom: 30px;
@@ -77,9 +112,92 @@
 
 .upload-controls {
   display: flex;
+  flex-direction: column;
   gap: 15px;
+}
+
+.upload-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #f1f1f1;
+}
+
+.tab-btn {
+  padding: 10px 20px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+  background: #f8f9fa;
+}
+
+.tab-btn.active {
+  border-bottom-color: #667eea;
+  color: #667eea;
+  font-weight: bold;
+}
+
+.upload-label {
+  display: inline-block;
+  padding: 12px 20px;
+  background: #667eea;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  border: none;
+  font-size: 16px;
+  text-align: center;
+  min-width: 200px;
+}
+
+.upload-label:hover {
+  background: #5a6fd8;
+}
+
+.file-upload input,
+.image-upload input {
+  display: none;
+}
+
+.url-input {
+  display: flex;
+  gap: 10px;
   align-items: center;
-  margin-bottom: 15px;
+}
+
+.url-input input {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
+}
+
+.url-input button {
+  padding: 12px 20px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.3s ease;
+}
+
+.url-input button:hover:not(:disabled) {
+  background: #5a6fd8;
+}
+
+.url-input button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
 }
 
 .upload-controls input[type="file"] {

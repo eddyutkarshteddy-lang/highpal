@@ -1,37 +1,6 @@
 
 import { useState, useRef } from 'react';
 import './App.css';
-import highpalLogo from './assets/highpal-logo.png';
-
-const accountIconStyle = {
-  position: 'fixed',
-  left: 20,
-  bottom: 20,
-  width: 40,
-  height: 40,
-  borderRadius: '50%',
-  background: '#e0e0e0',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-  cursor: 'pointer',
-  fontSize: '1.5rem',
-};
-
-const aboutButtonStyle = {
-  position: 'absolute',
-  top: 20,
-  right: 30,
-  padding: '8px 18px',
-  borderRadius: '20px',
-  background: '#f5f5f5',
-  border: 'none',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-  fontSize: '1.5rem',
-};
 
 function App() {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -41,7 +10,6 @@ function App() {
   const recognitionRef = useRef(null);
 
   // Speech-to-text
-  const [showAbout, setShowAbout] = useState(false);
   const handleMicClick = () => {
     if (!('webkitSpeechRecognition' in window)) {
       alert('Speech recognition not supported in this browser.');
@@ -76,13 +44,31 @@ function App() {
     window.speechSynthesis.speak(utter);
   };
 
-  // Simulate AI response (replace with backend call)
-  const handleAsk = () => {
+  // Connect to backend server
+  const handleAsk = async () => {
     if (!question.trim()) return;
-    setResponse('Thinking...');
-    setTimeout(() => {
-      setResponse(`AI Response to: "${question}"`);
-    }, 1200);
+    
+    setResponse('🔄 Processing your question... Please wait');
+    
+    try {
+      const response = await fetch('http://localhost:8000/ask_question/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ question: question.trim() })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setResponse(data.answer || 'No answer received');
+      } else {
+        setResponse(`Server error: ${response.status}`);
+      }
+    } catch (error) {
+      setResponse(`Connection error: ${error.message}`);
+    }
   };
 
   return (
@@ -248,6 +234,59 @@ function App() {
           </button>
         </div>
       </form>
+      
+      {/* Response area */}
+      {response && (
+        <div style={{
+          width: '600px',
+          maxWidth: '90vw',
+          margin: '24px auto 0',
+          padding: '24px',
+          background: '#fff',
+          borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(124,74,253,0.10)',
+          border: '1px solid #f0f0f0'
+        }}>
+          <h3 style={{ 
+            color: '#7c4afd', 
+            marginBottom: '16px', 
+            fontSize: '1.2rem',
+            fontWeight: 600 
+          }}>
+            Answer:
+          </h3>
+          <p style={{ 
+            color: '#333', 
+            lineHeight: 1.6,
+            fontSize: '1rem',
+            margin: 0 
+          }}>
+            {response}
+          </p>
+          {response && !response.startsWith('🔄') && !response.startsWith('Connection') && !response.startsWith('Server') && (
+            <button
+              onClick={handleSpeakerClick}
+              style={{
+                marginTop: '16px',
+                padding: '8px 16px',
+                background: '#f6f4ff',
+                border: '2px solid #e0d7fa',
+                borderRadius: '20px',
+                color: '#7c4afd',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              title="Listen to response"
+            >
+              🔊 Listen
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

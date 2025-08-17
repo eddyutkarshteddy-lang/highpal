@@ -7,37 +7,30 @@ import PyPDF2
 import io
 import logging
 import hashlib
+from PIL import Image
+import pytesseract
+import cv2
+import numpy as np
 import os
-from typing import List, Optional
+
+# Configure Tesseract path for Windows
+if os.name == 'nt':  # Windows
+    # Try common installation paths
+    possible_paths = [
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+        r'C:\Users\eddyu\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            break
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Haystack imports with proper error handling
-HAYSTACK_AVAILABLE = False
-Document = None
-Pipeline = None
-DocumentWriter = None
-SentenceTransformersDocumentEmbedder = None
-SentenceTransformersTextEmbedder = None
-ElasticsearchBM25Retriever = None
-ElasticsearchDocumentStore = None
-
-try:
-    from haystack import Document, Pipeline
-    from haystack.components.writers import DocumentWriter
-    from haystack.components.embedders import SentenceTransformersDocumentEmbedder, SentenceTransformersTextEmbedder
-    from haystack.components.retrievers import ElasticsearchBM25Retriever
-    from haystack_integrations.document_stores.elasticsearch import ElasticsearchDocumentStore
-    HAYSTACK_AVAILABLE = True
-    logger.info("✅ Haystack components loaded successfully")
-except ImportError as e:
-    logger.warning(f"⚠️ Haystack not available: {e}")
-    logger.info("🔄 Server will run in fallback mode without Haystack")
-    HAYSTACK_AVAILABLE = False
-
-app = FastAPI(title="HighPal Document Assistant", description="AI-powered document processing with Haystack + Elasticsearch")
+app = FastAPI(title="HighPal Document Assistant", description="Document processing and Q&A system")
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,7 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Elasticsearch and Haystack components
+# Simple in-memory storage for documents
+stored_documents = {}
 document_store = None
 indexing_pipeline = None
 retrieval_pipeline = None
