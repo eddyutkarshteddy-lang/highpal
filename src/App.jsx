@@ -7,6 +7,8 @@ function App() {
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
   const [listening, setListening] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const recognitionRef = useRef(null);
 
   // Speech-to-text
@@ -44,6 +46,80 @@ function App() {
     window.speechSynthesis.speak(utter);
   };
 
+  // File upload handler
+  const handleFileUpload = async (event) => {
+    console.log('File upload event triggered');
+    console.log('Event target:', event.target);
+    console.log('Files:', event.target.files);
+    console.log('Files length:', event.target.files ? event.target.files.length : 0);
+    
+    if (!event.target.files || event.target.files.length === 0) {
+      console.log('No files selected or files array is empty');
+      return;
+    }
+    
+    const file = event.target.files[0];
+    console.log('Selected file:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      lastModified: file.lastModified
+    });
+
+    if (!file) {
+      console.log('File is null or undefined');
+      return;
+    }
+
+    setUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      console.log('FormData created, sending request...');
+
+      // Determine the correct endpoint based on file type
+      let endpoint = 'http://localhost:8000/upload';
+      if (file.type === 'application/pdf') {
+        endpoint = 'http://localhost:8000/upload_pdf/';
+      } else if (file.type.startsWith('image/')) {
+        endpoint = 'http://localhost:8000/upload_image/';
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData
+      });
+
+      console.log('Upload response status:', response.status);
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Upload successful:', result);
+        setUploadedFiles(prev => [...prev, {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          id: result.file_id || result.doc_id || Date.now(),
+          processed: true,
+          extractedText: result.text || result.extracted_text || ''
+        }]);
+        alert(`✅ File "${file.name}" uploaded successfully!`);
+      } else {
+        const error = await response.text();
+        console.error('Upload failed:', error);
+        alert(`❌ Upload failed: ${error}`);
+      }
+    } catch (error) {
+      console.error('Connection error:', error);
+      alert(`❌ Connection error: ${error.message}`);
+    } finally {
+      setUploading(false);
+      // Reset the input value so the same file can be uploaded again
+      event.target.value = '';
+    }
+  };
+
   // Connect to backend server
   const handleAsk = async () => {
     if (!question.trim()) return;
@@ -51,13 +127,18 @@ function App() {
     setResponse('🔄 Processing your question... Please wait');
     
     try {
+      const requestBody = {
+        question: question.trim(),
+        uploaded_files: uploadedFiles.map(f => f.id) // Include uploaded files context
+      };
+
       const response = await fetch('http://localhost:8000/ask_question/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
-        body: JSON.stringify({ question: question.trim() })
+        body: JSON.stringify(requestBody)
       });
 
       if (response.ok) {
@@ -127,13 +208,47 @@ function App() {
           </svg>
         </button>
         <span style={{ fontSize: '1.2rem', color: '#4b4b6b', marginTop: '8px', fontWeight: 500 }}>
-          Speak when ready!
+          {listening ? 'Listening...' : 'Speak when ready!'}
         </span>
       </div>
+      
+      
+
+      {/* Uploaded Files Display */}
+      {uploadedFiles.length > 0 && (
+        <div style={{
+          width: '600px',
+          maxWidth: '90vw',
+          margin: '0 auto 24px',
+          padding: '16px',
+          background: '#f8f9ff',
+          borderRadius: '16px',
+          border: '1px solid #e0d7fa'
+        }}>
+          <h3 style={{ color: '#7c4afd', marginBottom: '12px', fontSize: '1rem' }}>📁 Uploaded Documents:</h3>
+          {uploadedFiles.map((file, index) => (
+            <div key={index} style={{
+              padding: '8px 12px',
+              background: '#fff',
+              borderRadius: '8px',
+              marginBottom: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              <span>📄</span>
+              <span style={{ flex: 1, fontSize: '0.9rem' }}>{file.name}</span>
+              <span style={{ fontSize: '0.8rem', color: '#666' }}>
+                {(file.size / 1024).toFixed(1)} KB
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Input bar */}
       <form onSubmit={e => { e.preventDefault(); handleAsk(); }} style={{ width: '600px', maxWidth: '90vw', margin: '0 auto', display: 'flex', alignItems: 'center', background: '#fff', borderRadius: '32px', boxShadow: '0 8px 32px rgba(124,74,253,0.10)', padding: '8px 16px', border: '1px solid #f0f0f0' }}>
         <div style={{ display: 'flex', flex: 1, border: '3px solid #fff', borderRadius: '32px', background: '#fff', boxShadow: '0 8px 32px rgba(124,74,253,0.10)', padding: '4px 8px', position: 'relative' }}>
-          <label htmlFor="image-upload" style={{ display: 'flex', alignItems: 'center', marginRight: '10px', cursor: 'pointer' }}>
+          <label htmlFor="file-upload" style={{ display: 'flex', alignItems: 'center', marginRight: '10px', cursor: 'pointer' }}>
             <span
               style={{
                 display: 'inline-flex',
@@ -142,24 +257,29 @@ function App() {
                 width: '32px',
                 height: '32px',
                 borderRadius: '50%',
-                background: '#f6f4ff',
+                background: uploading ? '#ccc' : '#f6f4ff',
                 border: '2px solid #e0d7fa',
-                color: '#7B61FF',
+                color: uploading ? '#666' : '#7B61FF',
                 fontSize: '1.6rem',
                 fontWeight: 700,
                 boxShadow: '0 2px 8px rgba(123,97,255,0.10)',
                 transition: 'background 0.2s',
                 position: 'relative',
               }}
-              onClick={e => { e.preventDefault(); setShowDropdown(v => !v); }}
+              onClick={e => { 
+                e.preventDefault(); 
+                if (!uploading) {
+                  setShowDropdown(v => !v); 
+                }
+              }}
             >
-              +
-              {showDropdown && (
+              {uploading ? '⏳' : '+'}
+              {showDropdown && !uploading && (
                 <div style={{
                   position: 'absolute',
                   top: '40px',
                   left: 0,
-                  minWidth: '100px',
+                  minWidth: '120px',
                   background: '#fff',
                   border: '1.5px solid #7B61FF',
                   borderRadius: '12px',
@@ -178,18 +298,51 @@ function App() {
                       borderRadius: '8px',
                       transition: 'background 0.2s',
                     }}
+                    onMouseEnter={e => e.target.style.background = '#f8f4ff'}
+                    onMouseLeave={e => e.target.style.background = 'transparent'}
                     onClick={e => {
                       e.stopPropagation();
                       setShowDropdown(false);
-                      document.getElementById('image-upload').click();
+                      const fileInput = document.getElementById('file-upload');
+                      fileInput.accept = '.pdf';
+                      fileInput.click();
                     }}
                   >
-                    Image
+                    📄 PDF
+                  </div>
+                  <div
+                    style={{
+                      padding: '8px 18px',
+                      color: '#7B61FF',
+                      fontWeight: 500,
+                      fontSize: '1rem',
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={e => e.target.style.background = '#f8f4ff'}
+                    onMouseLeave={e => e.target.style.background = 'transparent'}
+                    onClick={e => {
+                      e.stopPropagation();
+                      setShowDropdown(false);
+                      const fileInput = document.getElementById('file-upload');
+                      fileInput.accept = '.png,.jpg,.jpeg,.gif,.bmp,.webp';
+                      fileInput.click();
+                    }}
+                  >
+                    🖼️ Image
                   </div>
                 </div>
               )}
             </span>
-            <input id="image-upload" type="file" accept="image/*" style={{ display: 'none' }} />
+            <input 
+              id="file-upload" 
+              type="file" 
+              accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.bmp,.webp" 
+              style={{ display: 'none' }} 
+              onChange={handleFileUpload}
+              disabled={uploading}
+            />
           </label>
           <input
             type="text"

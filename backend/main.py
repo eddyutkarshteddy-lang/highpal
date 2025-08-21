@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import requests
 from bs4 import BeautifulSoup
 import PyPDF2
@@ -29,6 +30,25 @@ if os.name == 'nt':  # Windows
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Try to import Haystack components - graceful fallback if not available
+HAYSTACK_AVAILABLE = False
+try:
+    from haystack import Document, Pipeline
+    from haystack.document_stores.elasticsearch import ElasticsearchDocumentStore
+    from haystack.components.embedders import SentenceTransformersDocumentEmbedder, SentenceTransformersTextEmbedder
+    from haystack.components.writers import DocumentWriter
+    from haystack.components.retrievers.elasticsearch import ElasticsearchBM25Retriever
+    HAYSTACK_AVAILABLE = True
+    logger.info("✅ Haystack components imported successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Haystack not available: {e}")
+    logger.info("🔄 Running in fallback mode without advanced search capabilities")
+    # Define dummy classes for fallback
+    class Document:
+        def __init__(self, content, meta=None):
+            self.content = content
+            self.meta = meta or {}
 
 app = FastAPI(title="HighPal Document Assistant", description="Document processing and Q&A system")
 
@@ -98,6 +118,15 @@ async def health_check():
             "basic_storage": True
         }
     })
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_interface():
+    """Serve the admin interface for training data management"""
+    try:
+        with open("admin.html", "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Admin interface not found")
 
 @app.post("/upload_pdf/")
 async def upload_pdf(file: UploadFile = File(...)):
