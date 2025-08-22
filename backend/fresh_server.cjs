@@ -96,15 +96,34 @@ const server = http.createServer((req, res) => {
                 const totalLength = pdfBuffer.length;
                 console.log(`Upload received: ${totalLength} bytes`);
                 
-                // Extract text from PDF
+                // Extract text from PDF with enhanced options
                 let extractedText = '';
+                let extractionInfo = {};
                 try {
-                    const pdfData = await pdf(pdfBuffer);
+                    const pdfData = await pdf(pdfBuffer, {
+                        // PDF parsing options for better extraction
+                        max: 0, // Extract all pages
+                        version: 'v1.10.100', // Use specific version
+                        pagerender: null // Use default rendering
+                    });
+                    
                     extractedText = pdfData.text || '';
-                    console.log(`Extracted ${extractedText.length} characters from PDF`);
+                    extractionInfo = {
+                        numPages: pdfData.numpages || 0,
+                        info: pdfData.info || {},
+                        metadata: pdfData.metadata || {}
+                    };
+                    
+                    console.log(`PDF Extraction Results:`);
+                    console.log(`- Pages: ${extractionInfo.numPages}`);
+                    console.log(`- Extracted text length: ${extractedText.length} characters`);
+                    console.log(`- PDF file size: ${totalLength} bytes`);
+                    console.log(`- PDF info:`, JSON.stringify(extractionInfo.info, null, 2));
+                    
                 } catch (pdfError) {
                     console.log('PDF parsing failed, using fallback:', pdfError.message);
                     extractedText = `PDF content (${totalLength} bytes) - Text extraction failed: ${pdfError.message}`;
+                    extractionInfo = { error: pdfError.message };
                 }
                 
                 const fileId = Math.random().toString(36).substr(2, 9);
@@ -117,7 +136,8 @@ const server = http.createServer((req, res) => {
                     category: 'academic',
                     source: 'training_data',
                     title: 'Uploaded Training Document',
-                    upload_date: new Date().toISOString()
+                    upload_date: new Date().toISOString(),
+                    extraction_info: extractionInfo
                 };
                 
                 console.log(`Stored document ID: ${fileId}`);
@@ -128,7 +148,8 @@ const server = http.createServer((req, res) => {
                     size: totalLength,
                     file_id: fileId,
                     category: 'academic',
-                    extracted_text_length: extractedText.length
+                    extracted_text_length: extractedText.length,
+                    extraction_info: extractionInfo
                 };
                 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
