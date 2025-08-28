@@ -5,5 +5,9 @@ beautifulsoup4
 PyPDF2
 python-multipart
 haystack-ai
+farm-haystack
 elasticsearch
 sentence-transformers
+pydantic
+python-dotenv
+aiofiles
