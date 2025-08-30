@@ -11,3 +11,5 @@ sentence-transformers
 pydantic
 python-dotenv
 aiofiles
+pymongo
+dnspython
