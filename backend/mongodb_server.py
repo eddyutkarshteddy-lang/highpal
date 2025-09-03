@@ -303,6 +303,53 @@ async def add_document(request: AddDocumentRequest):
         logger.error(f"Add document error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to add document: {str(e)}")
 
+@app.post("/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    category: str = Form("general")
+):
+    """Simple file upload endpoint"""
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+        
+        pdf_content = await file.read()
+        if not pdf_content:
+            raise HTTPException(status_code=400, detail="Empty file")
+        
+        # Use advanced PDF extraction
+        from pdf_extractor import extract_pdf_text_advanced
+        extraction_result = extract_pdf_text_advanced(pdf_content)
+        
+        metadata = {
+            "filename": file.filename,
+            "title": title or file.filename,
+            "category": category,
+            "upload_date": datetime.now().isoformat(),
+            "size": len(pdf_content),
+            "source": "file_upload",
+            "storage": document_manager.storage_type,
+            "extraction_method": extraction_result.get('method', 'unknown'),
+            "extraction_score": extraction_result.get('score', 0)
+        }
+        
+        doc_id = document_manager.add_document(extraction_result['content'], metadata)
+        
+        return {
+            "document_id": doc_id,
+            "filename": file.filename,
+            "characters": len(extraction_result['content']),
+            "extraction_method": extraction_result.get('method', 'unknown'),
+            "extraction_score": extraction_result.get('score', 0),
+            "storage_type": document_manager.storage_type,
+            "message": f"File uploaded successfully to {document_manager.storage_type}"
+        }
+        
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 @app.post("/upload_pdf")
 async def upload_pdf_enhanced(
     file: UploadFile = File(...),
@@ -498,6 +545,80 @@ async def admin_interface():
                     <h4>📏 Average Length</h4>
                     <p>{stats.get('average_document_length', 0):.0f} chars</p>
                 </div>
+            </div>
+            
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 2px dashed #6c757d;">
+                <h3>📤 Upload PDF Document</h3>
+                <form id="uploadForm" enctype="multipart/form-data" style="margin: 15px 0;">
+                    <div style="margin: 10px 0;">
+                        <label for="pdfFile" style="display: block; margin-bottom: 5px; font-weight: bold;">Select PDF File:</label>
+                        <input type="file" id="pdfFile" name="file" accept=".pdf" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 300px;" required>
+                    </div>
+                    <div style="margin: 10px 0;">
+                        <label for="title" style="display: block; margin-bottom: 5px; font-weight: bold;">Title (optional):</label>
+                        <input type="text" id="title" name="title" placeholder="Document title" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 300px;">
+                    </div>
+                    <div style="margin: 10px 0;">
+                        <label for="category" style="display: block; margin-bottom: 5px; font-weight: bold;">Category (optional):</label>
+                        <input type="text" id="category" name="category" placeholder="academic, business, legal, etc." style="padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 300px;">
+                    </div>
+                    <button type="submit" style="background-color: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">🚀 Upload PDF</button>
+                </form>
+                <div id="uploadStatus" style="margin-top: 15px;"></div>
+            </div>
+            
+            <script>
+                document.getElementById('uploadForm').addEventListener('submit', async function(e) {{
+                    e.preventDefault();
+                    
+                    const formData = new FormData();
+                    const fileInput = document.getElementById('pdfFile');
+                    const titleInput = document.getElementById('title');
+                    const categoryInput = document.getElementById('category');
+                    const statusDiv = document.getElementById('uploadStatus');
+                    
+                    if (!fileInput.files[0]) {{
+                        statusDiv.innerHTML = '<div style="color: red;">Please select a PDF file</div>';
+                        return;
+                    }}
+                    
+                    formData.append('file', fileInput.files[0]);
+                    if (titleInput.value) formData.append('title', titleInput.value);
+                    if (categoryInput.value) formData.append('category', categoryInput.value);
+                    
+                    statusDiv.innerHTML = '<div style="color: blue;">📤 Uploading...</div>';
+                    
+                    try {{
+                        const response = await fetch('/upload_pdf', {{
+                            method: 'POST',
+                            body: formData
+                        }});
+                        
+                        const result = await response.json();
+                        
+                        if (response.ok) {{
+                            statusDiv.innerHTML = `
+                                <div style="color: green; padding: 10px; background-color: #d4edda; border-radius: 4px;">
+                                    ✅ Upload successful!<br>
+                                    📄 Document ID: ${{result.document_id}}<br>
+                                    📊 Characters extracted: ${{result.characters.toLocaleString()}}<br>
+                                    💾 Storage: ${{result.storage_type}}
+                                </div>
+                            `;
+                            // Reset form
+                            fileInput.value = '';
+                            titleInput.value = '';
+                            categoryInput.value = '';
+                            // Refresh page after 2 seconds to update stats
+                            setTimeout(() => window.location.reload(), 2000);
+                        }} else {{
+                            statusDiv.innerHTML = `<div style="color: red;">❌ Upload failed: ${{result.detail}}</div>`;
+                        }}
+                    }} catch (error) {{
+                        statusDiv.innerHTML = `<div style="color: red;">❌ Upload error: ${{error.message}}</div>`;
+                    }}
+                }});
+            </script>
             </div>
         """
         
