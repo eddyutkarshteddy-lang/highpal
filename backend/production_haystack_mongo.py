@@ -200,6 +200,31 @@ class HaystackStyleMongoIntegration:
             logger.error(f"❌ Document processing pipeline error: {e}")
             return 0
     
+    def add_document(self, content: str, metadata: dict = None) -> str:
+        """
+        Add a single document to the MongoDB collection
+        Compatible with the training_server.py upload endpoint
+        """
+        try:
+            # Create document data in the expected format
+            doc_data = {
+                "content": content,
+                "metadata": metadata or {}
+            }
+            
+            # Use the existing pipeline to process and store
+            result = self.process_and_store_documents([doc_data])
+            
+            if result > 0:
+                # Return the document ID from metadata if available
+                return metadata.get('id', str(ObjectId()))
+            else:
+                raise Exception("Failed to store document")
+                
+        except Exception as e:
+            logger.error(f"❌ Error adding single document: {e}")
+            raise e
+    
     def semantic_search(self, query: str, top_k: int = 5, filters: Dict = None) -> List[Dict[str, Any]]:
         """Semantic search pipeline using embeddings"""
         if not self.embedding_model:

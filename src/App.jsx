@@ -17,6 +17,8 @@ function App() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginLoading, setLoginLoading] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [showConversation, setShowConversation] = useState(false);
   const recognitionRef = useRef(null);
 
   // Load existing documents from MongoDB on app start
@@ -58,7 +60,17 @@ function App() {
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
+    // Load conversation history
+    const savedHistory = localStorage.getItem('highpal_conversations');
+    if (savedHistory) {
+      setConversationHistory(JSON.parse(savedHistory));
+    }
   }, []);
+
+  // Save conversation history whenever it changes
+  useEffect(() => {
+    localStorage.setItem('highpal_conversations', JSON.stringify(conversationHistory));
+  }, [conversationHistory]);
 
   // Login functions
   const handleLogin = async (e) => {
@@ -211,14 +223,29 @@ function App() {
   const handleAsk = async () => {
     if (!question.trim()) return;
     
+    const questionText = question.trim();
+    
+    // Create new conversation entry
+    const newEntry = {
+      id: Date.now(),
+      question: questionText,
+      answer: '🔄 Processing your question... Please wait',
+      timestamp: new Date().toISOString(),
+      user: user?.name || 'Anonymous',
+      searchResults: []
+    };
+    
+    // Add to conversation history immediately
+    setConversationHistory(prev => [...prev, newEntry]);
+    
     setResponse('🔄 Processing your question... Please wait');
     setIsSearching(true);
-    setCurrentQuery(question.trim());
+    setCurrentQuery(questionText);
     setSearchResults([]);
     
     try {
       const requestBody = {
-        question: question.trim(),
+        question: questionText,
         uploaded_files: uploadedFiles.map(f => f.id) // Include uploaded files context
       };
 
@@ -233,19 +260,53 @@ function App() {
 
       if (response.ok) {
         const data = await response.json();
-        setResponse(data.answer || 'No answer received');
+        const answerText = data.answer || 'No answer received';
+        const results = data.search_results || [];
+        
+        setResponse(answerText);
+        
+        // Update conversation history with real answer
+        setConversationHistory(prev => 
+          prev.map(entry => 
+            entry.id === newEntry.id 
+              ? { ...entry, answer: answerText, searchResults: results }
+              : entry
+          )
+        );
         
         // If search results are returned, display them
-        if (data.search_results && Array.isArray(data.search_results)) {
-          setSearchResults(data.search_results);
+        if (results && Array.isArray(results)) {
+          setSearchResults(results);
         }
       } else {
-        setResponse(`Server error: ${response.status}`);
+        const errorMessage = `Server error: ${response.status}`;
+        setResponse(errorMessage);
+        
+        // Update conversation history with error
+        setConversationHistory(prev => 
+          prev.map(entry => 
+            entry.id === newEntry.id 
+              ? { ...entry, answer: errorMessage }
+              : entry
+          )
+        );
       }
     } catch (error) {
-      setResponse(`Connection error: ${error.message}`);
+      const errorMessage = `Connection error: ${error.message}`;
+      setResponse(errorMessage);
+      
+      // Update conversation history with error
+      setConversationHistory(prev => 
+        prev.map(entry => 
+          entry.id === newEntry.id 
+            ? { ...entry, answer: errorMessage }
+            : entry
+        )
+      );
     } finally {
       setIsSearching(false);
+      // Clear the question input after processing
+      setQuestion('');
     }
   };
 
@@ -254,6 +315,82 @@ function App() {
     const followUpQuestion = `Based on this information: "${resultText}", please explain more about ${currentQuery}`;
     setQuestion(followUpQuestion);
     handleAsk();
+  };
+
+  // Helper function to format timestamps
+  const formatTime = (timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
+  // Clear conversation history
+  const clearConversationHistory = () => {
+    if (window.confirm('Are you sure you want to clear all conversation history?')) {
+      setConversationHistory([]);
+      setShowConversation(false);
+    }
+  };
+
+  // Conversation History Component
+  const ConversationHistory = ({ history, onClear }) => {
+    const messagesEndRef = useRef(null);
+
+    // Auto-scroll to bottom when new messages arrive
+    useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [history]);
+
+    return (
+      <div className="conversation-panel">
+        <div className="conversation-header">
+          <h3>💬 Conversation History</h3>
+          <div className="conversation-controls">
+            <button onClick={onClear} className="clear-btn" title="Clear History">
+              🗑️ Clear
+            </button>
+            <button 
+              onClick={() => setShowConversation(false)} 
+              className="close-btn"
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        
+        <div className="conversation-messages">
+          {history.length === 0 ? (
+            <div className="no-conversations">
+              <p>💭 No conversations yet!</p>
+              <p>Start asking questions to see your chat history here.</p>
+            </div>
+          ) : (
+            history.map((entry) => (
+              <div key={entry.id} className="conversation-entry">
+                <div className="message user-message">
+                  <div className="message-content">🤔 {entry.question}</div>
+                  <div className="message-time">{formatTime(entry.timestamp)}</div>
+                </div>
+                <div className="message ai-message">
+                  <div className="message-content">
+                    🤖 {entry.answer}
+                  </div>
+                  <div className="message-time">{formatTime(entry.timestamp)}</div>
+                </div>
+                {entry.searchResults && entry.searchResults.length > 0 && (
+                  <div className="search-results-preview">
+                    <small>📚 Found {entry.searchResults.length} relevant sources</small>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -614,6 +751,45 @@ function App() {
           query={currentQuery}
           isLoading={isSearching}
           onAskQuestion={handleAskFromResult}
+        />
+      )}
+
+      {/* Conversation Toggle Button */}
+      <button 
+        onClick={() => setShowConversation(!showConversation)}
+        className={`conversation-btn ${conversationHistory.length > 0 ? 'has-history' : ''}`}
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          background: conversationHistory.length > 0 
+            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' 
+            : '#6c757d',
+          color: 'white',
+          border: 'none',
+          borderRadius: '25px',
+          padding: '12px 20px',
+          fontSize: '0.9rem',
+          fontWeight: '500',
+          cursor: 'pointer',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
+          zIndex: 999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          transition: 'all 0.3s ease',
+          animation: conversationHistory.length > 0 ? 'pulse 2s infinite' : 'none'
+        }}
+        title="View conversation history"
+      >
+        💬 Chat History ({conversationHistory.length})
+      </button>
+
+      {/* Conversation Panel */}
+      {showConversation && (
+        <ConversationHistory 
+          history={conversationHistory}
+          onClear={clearConversationHistory}
         />
       )}
 
