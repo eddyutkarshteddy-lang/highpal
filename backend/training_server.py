@@ -3,14 +3,16 @@ HighPal AI Server with PDF URL Training Capabilities
 Enhanced server with model training from public PDF URLs
 """
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import logging
 import os
 from datetime import datetime
 import hashlib
 import io
+import json
 
 # Import training capabilities
 from training_endpoints import create_training_endpoints
@@ -18,6 +20,11 @@ from training_endpoints import create_training_endpoints
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Pydantic models for request/response
+class QuestionRequest(BaseModel):
+    question: str
+    uploaded_files: list = []  # Optional list of uploaded file IDs
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -169,13 +176,21 @@ async def search_documents(q: str, limit: int = 10):
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/ask_question/")
 @app.post("/ask_question")
 @app.get("/ask_question")
-async def ask_question(question: str = None, q: str = None):
-    """Ask a question using AI"""
+async def ask_question(request: QuestionRequest = None, question: str = None, q: str = None):
+    """Ask a question using AI - supports both GET (query params) and POST (JSON body)"""
     try:
-        # Accept both 'question' and 'q' parameters for flexibility
-        query = question or q
+        # Handle different request formats
+        if request and request.question:
+            query = request.question
+            uploaded_files = getattr(request, 'uploaded_files', [])
+        else:
+            # Accept both 'question' and 'q' parameters for GET requests
+            query = question or q
+            uploaded_files = []
+            
         if not query:
             raise HTTPException(status_code=400, detail="Question parameter required")
         
@@ -193,11 +208,28 @@ async def ask_question(question: str = None, q: str = None):
         else:
             answer = f"I couldn't find specific information about '{query}' in the available documents. Please try a different question or upload more relevant documents."
         
+        # Format search results for the SearchResults component
+        formatted_search_results = []
+        for i, doc in enumerate(search_results[:5]):  # Top 5 results
+            formatted_result = {
+                "content": doc.get('content', '')[:300] + "..." if len(doc.get('content', '')) > 300 else doc.get('content', ''),
+                "score": doc.get('score', 0.5),  # Relevance score from semantic search
+                "metadata": {
+                    "filename": doc.get('filename', f"document_{i+1}.pdf"),
+                    "source": doc.get('source', 'unknown'),
+                    "method": "semantic_search",
+                    "document_id": doc.get('_id', f"doc_{i+1}"),
+                    "source_type": doc.get('metadata', {}).get('source_type', 'document')
+                }
+            }
+            formatted_search_results.append(formatted_result)
+        
         return {
             "question": query,
             "answer": answer,
+            "search_results": formatted_search_results,  # ✅ Added for SearchResults component
             "sources_found": len(search_results),
-            "confidence": "medium" if search_results else "low"
+            "confidence": "high" if search_results and len(search_results) >= 3 else ("medium" if search_results else "low")
         }
         
     except Exception as e:

@@ -1,15 +1,55 @@
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import SearchResults from './components/SearchResults';
 import './App.css';
 
 function App() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [currentQuery, setCurrentQuery] = useState('');
   const [listening, setListening] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const recognitionRef = useRef(null);
+
+  // Load existing documents from MongoDB on app start
+  const loadExistingDocuments = async () => {
+    try {
+      console.log('Loading existing documents from MongoDB...');
+      const response = await fetch('http://localhost:8003/documents');
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Loaded documents:', data);
+        
+        if (data.documents && Array.isArray(data.documents)) {
+          const formattedFiles = data.documents.map(doc => ({
+            name: doc.filename || 'Unknown Document',
+            size: doc.file_size || 0,
+            type: doc.file_type || 'application/pdf',
+            id: doc.id,
+            processed: true,
+            extractedText: doc.content_preview || ''
+          }));
+          
+          setUploadedFiles(formattedFiles);
+          console.log(`✅ Loaded ${formattedFiles.length} existing documents`);
+        }
+      } else {
+        console.warn('Failed to load documents:', response.status);
+      }
+    } catch (error) {
+      console.error('Error loading existing documents:', error);
+    }
+  };
+
+  // Load documents on app start
+  useEffect(() => {
+    loadExistingDocuments();
+  }, []);
 
   // Speech-to-text
   const handleMicClick = () => {
@@ -78,13 +118,8 @@ function App() {
       formData.append('file', file);
       console.log('FormData created, sending request...');
 
-      // Determine the correct endpoint based on file type
-      let endpoint = 'http://localhost:8000/upload';
-      if (file.type === 'application/pdf') {
-        endpoint = 'http://localhost:8000/upload_pdf/';
-      } else if (file.type.startsWith('image/')) {
-        endpoint = 'http://localhost:8000/upload_image/';
-      }
+      // Use the generic upload endpoint for all file types
+      let endpoint = 'http://localhost:8003/upload';
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -125,6 +160,9 @@ function App() {
     if (!question.trim()) return;
     
     setResponse('🔄 Processing your question... Please wait');
+    setIsSearching(true);
+    setCurrentQuery(question.trim());
+    setSearchResults([]);
     
     try {
       const requestBody = {
@@ -132,7 +170,7 @@ function App() {
         uploaded_files: uploadedFiles.map(f => f.id) // Include uploaded files context
       };
 
-      const response = await fetch('http://localhost:8000/ask_question/', {
+      const response = await fetch('http://localhost:8003/ask_question/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -144,12 +182,26 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         setResponse(data.answer || 'No answer received');
+        
+        // If search results are returned, display them
+        if (data.search_results && Array.isArray(data.search_results)) {
+          setSearchResults(data.search_results);
+        }
       } else {
         setResponse(`Server error: ${response.status}`);
       }
     } catch (error) {
       setResponse(`Connection error: ${error.message}`);
+    } finally {
+      setIsSearching(false);
     }
+  };
+
+  // Handle asking follow-up questions from search results
+  const handleAskFromResult = (resultText) => {
+    const followUpQuestion = `Based on this information: "${resultText}", please explain more about ${currentQuery}`;
+    setQuestion(followUpQuestion);
+    handleAsk();
   };
 
   return (
@@ -439,6 +491,16 @@ function App() {
             </button>
           )}
         </div>
+      )}
+      
+      {/* Search Results */}
+      {searchResults.length > 0 && (
+        <SearchResults
+          results={searchResults}
+          query={currentQuery}
+          isLoading={isSearching}
+          onAskQuestion={handleAskFromResult}
+        />
       )}
     </div>
   );
