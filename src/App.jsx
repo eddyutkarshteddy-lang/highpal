@@ -13,6 +13,10 @@ function App() {
   const [listening, setListening] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [loginLoading, setLoginLoading] = useState(false);
   const recognitionRef = useRef(null);
 
   // Load existing documents from MongoDB on app start
@@ -49,7 +53,55 @@ function App() {
   // Load documents on app start
   useEffect(() => {
     loadExistingDocuments();
+    // Check for existing login session
+    const savedUser = localStorage.getItem('highpal_user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
   }, []);
+
+  // Login functions
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoginLoading(true);
+    
+    try {
+      // For now, implement a simple demo login
+      // In production, this would call your authentication API
+      if (loginForm.email && loginForm.password) {
+        const userData = {
+          id: Date.now(),
+          email: loginForm.email,
+          name: loginForm.email.split('@')[0],
+          loginTime: new Date().toISOString()
+        };
+        
+        setUser(userData);
+        localStorage.setItem('highpal_user', JSON.stringify(userData));
+        setShowLoginModal(false);
+        setLoginForm({ email: '', password: '' });
+        
+        alert(`✅ Welcome ${userData.name}! You're now logged in.`);
+      } else {
+        alert('Please enter both email and password');
+      }
+    } catch (error) {
+      alert('❌ Login failed: ' + error.message);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('highpal_user');
+    alert('👋 You have been logged out successfully!');
+  };
+
+  const openLoginModal = (e) => {
+    e.preventDefault();
+    setShowLoginModal(true);
+  };
 
   // Speech-to-text
   const handleMicClick = () => {
@@ -206,12 +258,74 @@ function App() {
 
   return (
   <div style={{ minHeight: '100vh', width: '100vw', background: 'radial-gradient(circle at 10% 10%, #f6f8fc 0%, #fff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, Helvetica, sans-serif', paddingTop: '40px', position: 'relative' }}>
-      {/* Login top right */}
-      <a href="/login" style={{ position: 'absolute', top: 40, right: 48, textDecoration: 'none', zIndex: 10 }}>
-        <span style={{ fontSize: '1rem', color: '#7B61FF', fontWeight: 500, letterSpacing: '0.01em', background: 'transparent', fontFamily: 'Inter, Arial, Helvetica, sans-serif', display: 'inline-block', border: '2px solid #7B61FF', borderRadius: '16px', padding: '6px 18px' }}>
-          Login
-        </span>
-      </a>
+      {/* Login/User section top right */}
+      <div style={{ position: 'absolute', top: 40, right: 48, zIndex: 10 }}>
+        {user ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ 
+              fontSize: '0.9rem', 
+              color: '#5B3FFF', 
+              fontWeight: 500,
+              fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+            }}>
+              👋 Hi, {user.name}!
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                fontSize: '0.9rem',
+                color: '#7B61FF',
+                fontWeight: 500,
+                letterSpacing: '0.01em',
+                background: 'transparent',
+                fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+                border: '2px solid #7B61FF',
+                borderRadius: '16px',
+                padding: '6px 18px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.target.style.background = '#7B61FF';
+                e.target.style.color = '#fff';
+              }}
+              onMouseLeave={e => {
+                e.target.style.background = 'transparent';
+                e.target.style.color = '#7B61FF';
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={openLoginModal}
+            style={{
+              fontSize: '1rem',
+              color: '#7B61FF',
+              fontWeight: 500,
+              letterSpacing: '0.01em',
+              background: 'transparent',
+              fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+              border: '2px solid #7B61FF',
+              borderRadius: '16px',
+              padding: '6px 18px',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => {
+              e.target.style.background = '#7B61FF';
+              e.target.style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              e.target.style.background = 'transparent';
+              e.target.style.color = '#7B61FF';
+            }}
+          >
+            Login
+          </button>
+        )}
+      </div>
       {/* Company name top left */}
       <a href="/" style={{ position: 'absolute', top: 32, left: 48, textDecoration: 'none', zIndex: 10 }}>
         <span style={{ fontSize: '2.5rem', color: '#5B3FFF', fontWeight: 700, letterSpacing: '-1px', background: 'transparent', borderRadius: '0', boxShadow: 'none', padding: '0', border: 'none', fontFamily: 'Inter, Arial, Helvetica, sans-serif', display: 'inline-block', lineHeight: 1 }}>
@@ -501,6 +615,178 @@ function App() {
           isLoading={isSearching}
           onAskQuestion={handleAskFromResult}
         />
+      )}
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: '20px',
+            padding: '40px',
+            width: '400px',
+            maxWidth: '90vw',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            position: 'relative'
+          }}>
+            {/* Close button */}
+            <button
+              onClick={() => setShowLoginModal(false)}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '20px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            >
+              ×
+            </button>
+
+            {/* Modal header */}
+            <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+              <h2 style={{
+                color: '#5B3FFF',
+                fontSize: '2rem',
+                fontWeight: 700,
+                margin: '0 0 10px 0',
+                fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+              }}>
+                Welcome to HighPal
+              </h2>
+              <p style={{
+                color: '#666',
+                fontSize: '1rem',
+                margin: 0,
+                fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+              }}>
+                Sign in to save your documents and chat history
+              </p>
+            </div>
+
+            {/* Login form */}
+            <form onSubmit={handleLogin}>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{
+                  display: 'block',
+                  color: '#333',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  marginBottom: '8px',
+                  fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+                }}>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={loginForm.email}
+                  onChange={e => setLoginForm({...loginForm, email: e.target.value})}
+                  placeholder="Enter your email"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #e0d7fa',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#7B61FF'}
+                  onBlur={e => e.target.style.borderColor = '#e0d7fa'}
+                />
+              </div>
+
+              <div style={{ marginBottom: '30px' }}>
+                <label style={{
+                  display: 'block',
+                  color: '#333',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  marginBottom: '8px',
+                  fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+                }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={loginForm.password}
+                  onChange={e => setLoginForm({...loginForm, password: e.target.value})}
+                  placeholder="Enter your password"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #e0d7fa',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+                    outline: 'none',
+                    transition: 'border-color 0.2s',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={e => e.target.style.borderColor = '#7B61FF'}
+                  onBlur={e => e.target.style.borderColor = '#e0d7fa'}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                style={{
+                  width: '100%',
+                  padding: '14px 20px',
+                  background: loginLoading ? '#ccc' : 'linear-gradient(90deg, #a084fa 0%, #7c4afd 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '1.1rem',
+                  fontWeight: 600,
+                  cursor: loginLoading ? 'not-allowed' : 'pointer',
+                  fontFamily: 'Inter, Arial, Helvetica, sans-serif',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {loginLoading ? '🔄 Signing in...' : '🚀 Sign In'}
+              </button>
+            </form>
+
+            {/* Demo notice */}
+            <div style={{
+              marginTop: '20px',
+              padding: '12px',
+              background: '#f8f9ff',
+              borderRadius: '8px',
+              border: '1px solid #e0d7fa'
+            }}>
+              <p style={{
+                fontSize: '0.85rem',
+                color: '#666',
+                margin: 0,
+                textAlign: 'center',
+                fontFamily: 'Inter, Arial, Helvetica, sans-serif'
+              }}>
+                💡 <strong>Demo Mode:</strong> Use any email and password to sign in
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
