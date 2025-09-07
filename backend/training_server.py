@@ -14,12 +14,36 @@ import hashlib
 import io
 import json
 
-# Import training capabilities
-from training_endpoints import create_training_endpoints
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Import training capabilities (optional)
+try:
+    from training_endpoints import create_training_endpoints
+    TRAINING_AVAILABLE = True
+    logger.info("✅ Training endpoints loaded successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ Training endpoints not available: {e}")
+    TRAINING_AVAILABLE = False
+    def create_training_endpoints(app):
+        pass
+
+# Import PDF extractor (optional)
+try:
+    from pdf_extractor import AdvancedPDFExtractor
+    PDF_EXTRACTOR_AVAILABLE = True
+    logger.info("✅ PDF extractor loaded successfully")
+except ImportError as e:
+    logger.warning(f"⚠️ PDF extractor not available: {e}")
+    PDF_EXTRACTOR_AVAILABLE = False
+    
+    class AdvancedPDFExtractor:
+        def extract_text_from_pdf(self, content):
+            return {
+                'best_text': 'PDF extraction libraries not available. Please install PyMuPDF, PyPDF2, pdfplumber, and pdfminer to enable PDF processing.', 
+                'extraction_info': {'method': 'fallback', 'status': 'error', 'error': 'Missing dependencies'}
+            }  # No-op fallback
 
 # Pydantic models for request/response
 class QuestionRequest(BaseModel):
@@ -116,13 +140,36 @@ async def upload_file(
         
         # Process based on file type
         text_content = ""
+        extraction_info = {}
+        
         if file.content_type == "text/plain":
             text_content = content.decode('utf-8')
+            extraction_info = {"method": "text_decode", "status": "success"}
         elif file.content_type == "application/pdf":
-            # Simple PDF processing
-            text_content = f"PDF file: {file.filename}"
+            # Use advanced PDF extraction
+            try:
+                if PDF_EXTRACTOR_AVAILABLE:
+                    extractor = AdvancedPDFExtractor()
+                    extraction_result = extractor.extract_text_from_pdf(content)
+                    text_content = extraction_result.get('best_text', '')
+                    extraction_info = extraction_result.get('extraction_info', {})
+                    
+                    if not text_content or len(text_content.strip()) < 10:
+                        raise Exception("Extracted text too short or empty")
+                        
+                    logger.info(f"✅ PDF extraction successful: {len(text_content)} characters")
+                else:
+                    raise Exception("PDF extractor not available")
+                    
+            except Exception as e:
+                logger.error(f"❌ PDF extraction failed: {e}")
+                raise HTTPException(
+                    status_code=422, 
+                    detail=f"Failed to extract PDF content: {str(e)}. Please ensure the PDF contains readable text."
+                )
         else:
             text_content = f"File: {file.filename} ({file.content_type})"
+            extraction_info = {"method": "fallback", "status": "success"}
         
         # Create document metadata
         doc_id = hashlib.md5(content).hexdigest()
@@ -134,7 +181,8 @@ async def upload_file(
             "content": text_content,
             "size": len(content),
             "uploaded_at": datetime.now().isoformat(),
-            "source_type": "manual_upload"
+            "source_type": "manual_upload",
+            "extraction_info": extraction_info
         }
         
         # Store in MongoDB
@@ -196,40 +244,43 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         
         mongo = get_mongo_integration()
         if not mongo:
-            raise HTTPException(status_code=500, detail="Database connection not available")
+            # Fallback response when MongoDB is not available
+            return {
+                "question": query,
+                "answer": f"Hello! I'm Pal, your AI learning assistant. You asked: '{query}'. While I can't access the document database right now, I'm here to help you with your studies! Please try uploading some documents first.",
+                "source": "Pal AI Assistant (Fallback Mode)",
+                "timestamp": datetime.now().isoformat(),
+                "search_results": []
+            }
         
         # Search for relevant documents
         search_results = mongo.semantic_search(query, top_k=5)
         
-        # Generate answer based on search results
-        if search_results:
-            context = "\\n".join([doc.get('content', '') for doc in search_results[:3]])
-            answer = f"Based on the available documents, here's what I found about '{query}': {context[:500]}..."
+        # Filter out corrupted documents containing error messages
+        def is_valid_document(doc):
+            content = doc.get('content', '')
+            error_phrases = [
+                'Failed to extract PDF content',
+                'PDF extraction failed',
+                'extraction not available',
+                'PDF extraction libraries not available'
+            ]
+            return not any(phrase in content for phrase in error_phrases)
+        
+        # Filter search results
+        valid_search_results = [doc for doc in search_results if is_valid_document(doc)]
+        
+        # Generate answer based on valid search results
+        if valid_search_results:
+            context = "\\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
+            answer = f"Here's what I found about '{query}': {context[:500]}..."
         else:
-            answer = f"I couldn't find specific information about '{query}' in the available documents. Please try a different question or upload more relevant documents."
+            answer = f"I don't have specific information about '{query}' in my knowledge base. Could you try rephrasing your question or asking about a different topic?"
         
-        # Format search results for the SearchResults component
-        formatted_search_results = []
-        for i, doc in enumerate(search_results[:5]):  # Top 5 results
-            formatted_result = {
-                "content": doc.get('content', '')[:300] + "..." if len(doc.get('content', '')) > 300 else doc.get('content', ''),
-                "score": doc.get('score', 0.5),  # Relevance score from semantic search
-                "metadata": {
-                    "filename": doc.get('filename', f"document_{i+1}.pdf"),
-                    "source": doc.get('source', 'unknown'),
-                    "method": "semantic_search",
-                    "document_id": doc.get('_id', f"doc_{i+1}"),
-                    "source_type": doc.get('metadata', {}).get('source_type', 'document')
-                }
-            }
-            formatted_search_results.append(formatted_result)
-        
+        # Don't show documents to users - they're only for training/context
         return {
             "question": query,
-            "answer": answer,
-            "search_results": formatted_search_results,  # ✅ Added for SearchResults component
-            "sources_found": len(search_results),
-            "confidence": "high" if search_results and len(search_results) >= 3 else ("medium" if search_results else "low")
+            "answer": answer
         }
         
     except Exception as e:

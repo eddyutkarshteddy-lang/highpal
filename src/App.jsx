@@ -1,15 +1,11 @@
 
 import { useState, useRef, useEffect } from 'react';
-import SearchResults from './components/SearchResults';
 import './App.css';
 
 function App() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [currentQuery, setCurrentQuery] = useState('');
   const [listening, setListening] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -19,6 +15,11 @@ function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
   const [showConversation, setShowConversation] = useState(false);
+  const [sampleMode, setSampleMode] = useState(true); // Pal demo mode
+  const [conversationFlow, setConversationFlow] = useState('idle');
+  const [transcribedText, setTranscribedText] = useState('');
+  const [continuousMode, setContinuousMode] = useState(false);
+  const [autoListenTimeout, setAutoListenTimeout] = useState(null);
   const recognitionRef = useRef(null);
 
   // Load existing documents from MongoDB on app start
@@ -150,6 +151,220 @@ function App() {
     window.speechSynthesis.speak(utter);
   };
 
+  // Pal Voice Assistant System
+  const palSampleResponses = {
+    greeting: [
+      "Hello! I'm Pal, your AI academic assistant. How can I help you today?",
+      "Hi there! Pal here, ready to help with your academic questions!",
+      "Hey! I'm Pal. What would you like to learn about today?"
+    ],
+    uploadPrompt: [
+      "Great! I see you want to upload a document. I can help you analyze PDFs, Word docs, and text files.",
+      "Perfect! Upload your academic materials and I'll help you understand them better.",
+      "Excellent! I'm ready to process your documents and answer questions about them."
+    ],
+    searchHelp: [
+      "I can help you search through your uploaded documents. What topic are you interested in?",
+      "Let me help you find information in your materials. What are you looking for?",
+      "I'm here to help you discover insights from your documents. What's your question?"
+    ],
+    encouragement: [
+      "That's a great question! Let me search through your materials.",
+      "Interesting topic! I'll look through your documents for relevant information.",
+      "Good thinking! Let me find the best information for you."
+    ],
+    noDocuments: [
+      "I notice you haven't uploaded any documents yet. Would you like to upload some academic materials first?",
+      "To give you the best answers, I'd recommend uploading some documents. Shall we start there?",
+      "I'm ready to help, but I'll need some documents to work with. Want to upload some files?"
+    ]
+  };
+
+  const speakAsPal = (text) => {
+    if (!('speechSynthesis' in window)) return;
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new window.SpeechSynthesisUtterance(text);
+    
+    // Pal's voice settings - friendly and clear
+    utterance.rate = 0.9;
+    utterance.pitch = 1.1;
+    utterance.volume = 0.8;
+    
+    // Try to use a pleasant voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(voice => 
+      voice.name.includes('Female') || 
+      voice.name.includes('Samantha') ||
+      voice.name.includes('Karen') ||
+      voice.name.includes('Zira')
+    );
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const getPalResponse = (userInput, context = {}) => {
+    const input = userInput.toLowerCase();
+    
+    // Greeting patterns
+    if (input.includes('hello') || input.includes('hi') || input.includes('hey') || input === '') {
+      return palSampleResponses.greeting[Math.floor(Math.random() * palSampleResponses.greeting.length)];
+    }
+    
+    // Upload-related queries
+    if (input.includes('upload') || input.includes('file') || input.includes('document')) {
+      return palSampleResponses.uploadPrompt[Math.floor(Math.random() * palSampleResponses.uploadPrompt.length)];
+    }
+    
+    // Search-related queries
+    if (input.includes('search') || input.includes('find') || input.includes('look for')) {
+      if (uploadedFiles.length === 0) {
+        return palSampleResponses.noDocuments[Math.floor(Math.random() * palSampleResponses.noDocuments.length)];
+      }
+      return palSampleResponses.searchHelp[Math.floor(Math.random() * palSampleResponses.searchHelp.length)];
+    }
+    
+    // Default response with encouragement
+    if (uploadedFiles.length === 0) {
+      return palSampleResponses.noDocuments[Math.floor(Math.random() * palSampleResponses.noDocuments.length)];
+    }
+    
+    return palSampleResponses.encouragement[Math.floor(Math.random() * palSampleResponses.encouragement.length)];
+  };
+
+  const startPalConversation = () => {
+    if (!('webkitSpeechRecognition' in window)) {
+      alert('Speech recognition not supported in this browser.');
+      return;
+    }
+    
+    setConversationFlow('active');
+    
+    // Pal introduction
+    const introduction = "Hi! I'm Pal, your AI academic assistant. I'm here to help you with your studies. You can ask me about your uploaded documents, or I can help you get started. What would you like to do?";
+    
+    // Add to conversation history
+    const palEntry = {
+      id: Date.now(),
+      speaker: 'Pal',
+      message: introduction,
+      timestamp: new Date().toISOString(),
+      type: 'assistant'
+    };
+    
+    setConversationHistory(prev => [...prev, palEntry]);
+    speakAsPal(introduction);
+    
+    // Start listening after introduction
+    setTimeout(() => {
+      startListeningForPal();
+    }, 3000);
+  };
+
+  const startListeningForPal = () => {
+    if (!('webkitSpeechRecognition' in window)) return;
+    
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.continuous = false;
+    
+    recognition.onstart = () => {
+      setListening(true);
+      setTranscribedText('Listening...');
+    };
+    
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setTranscribedText(transcript);
+      
+      // Add user message to conversation
+      const userEntry = {
+        id: Date.now(),
+        speaker: user?.name || 'You',
+        message: transcript,
+        timestamp: new Date().toISOString(),
+        type: 'user'
+      };
+      
+      setConversationHistory(prev => [...prev, userEntry]);
+      
+      // Generate and speak Pal's response
+      const palResponse = getPalResponse(transcript);
+      
+      const palEntry = {
+        id: Date.now() + 1,
+        speaker: 'Pal',
+        message: palResponse,
+        timestamp: new Date().toISOString(),
+        type: 'assistant'
+      };
+      
+      setConversationHistory(prev => [...prev, palEntry]);
+      
+      // Speak the response
+      setTimeout(() => {
+        speakAsPal(palResponse);
+      }, 500);
+      
+      // Continue listening after response
+      setTimeout(() => {
+        if (conversationFlow === 'active') {
+          startListeningForPal();
+        }
+      }, palResponse.length * 80 + 2000); // Estimate speech time + pause
+    };
+    
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      setTranscribedText('Error: ' + event.error);
+      setListening(false);
+    };
+    
+    recognition.onend = () => {
+      setListening(false);
+      setTranscribedText('');
+    };
+    
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const stopPalConversation = () => {
+    setConversationFlow('idle');
+    setListening(false);
+    setTranscribedText('');
+    
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    
+    // Cancel any ongoing speech
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    
+    // Add goodbye message
+    const goodbyeMessage = "Goodbye! Feel free to start another conversation anytime. I'm always here to help with your academic needs!";
+    
+    const palEntry = {
+      id: Date.now(),
+      speaker: 'Pal',
+      message: goodbyeMessage,
+      timestamp: new Date().toISOString(),
+      type: 'assistant'
+    };
+    
+    setConversationHistory(prev => [...prev, palEntry]);
+    speakAsPal(goodbyeMessage);
+  };
+
   // File upload handler
   const handleFileUpload = async (event) => {
     console.log('File upload event triggered');
@@ -231,17 +446,13 @@ function App() {
       question: questionText,
       answer: '🔄 Processing your question... Please wait',
       timestamp: new Date().toISOString(),
-      user: user?.name || 'Anonymous',
-      searchResults: []
+      user: user?.name || 'Anonymous'
     };
     
     // Add to conversation history immediately
     setConversationHistory(prev => [...prev, newEntry]);
     
     setResponse('🔄 Processing your question... Please wait');
-    setIsSearching(true);
-    setCurrentQuery(questionText);
-    setSearchResults([]);
     
     try {
       const requestBody = {
@@ -261,7 +472,6 @@ function App() {
       if (response.ok) {
         const data = await response.json();
         const answerText = data.answer || 'No answer received';
-        const results = data.search_results || [];
         
         setResponse(answerText);
         
@@ -269,15 +479,10 @@ function App() {
         setConversationHistory(prev => 
           prev.map(entry => 
             entry.id === newEntry.id 
-              ? { ...entry, answer: answerText, searchResults: results }
+              ? { ...entry, answer: answerText }
               : entry
           )
         );
-        
-        // If search results are returned, display them
-        if (results && Array.isArray(results)) {
-          setSearchResults(results);
-        }
       } else {
         const errorMessage = `Server error: ${response.status}`;
         setResponse(errorMessage);
@@ -304,17 +509,9 @@ function App() {
         )
       );
     } finally {
-      setIsSearching(false);
       // Clear the question input after processing
       setQuestion('');
     }
-  };
-
-  // Handle asking follow-up questions from search results
-  const handleAskFromResult = (resultText) => {
-    const followUpQuestion = `Based on this information: "${resultText}", please explain more about ${currentQuery}`;
-    setQuestion(followUpQuestion);
-    handleAsk();
   };
 
   // Helper function to format timestamps
@@ -379,11 +576,6 @@ function App() {
                   </div>
                   <div className="message-time">{formatTime(entry.timestamp)}</div>
                 </div>
-                {entry.searchResults && entry.searchResults.length > 0 && (
-                  <div className="search-results-preview">
-                    <small>📚 Found {entry.searchResults.length} relevant sources</small>
-                  </div>
-                )}
               </div>
             ))
           )}
@@ -515,39 +707,134 @@ function App() {
         </span>
       </div>
       
-      
-
-      {/* Uploaded Files Display */}
-      {uploadedFiles.length > 0 && (
-        <div style={{
-          width: '600px',
-          maxWidth: '90vw',
-          margin: '0 auto 24px',
-          padding: '16px',
-          background: '#f8f9ff',
-          borderRadius: '16px',
-          border: '1px solid #e0d7fa'
-        }}>
-          <h3 style={{ color: '#7c4afd', marginBottom: '12px', fontSize: '1rem' }}>📁 Uploaded Documents:</h3>
-          {uploadedFiles.map((file, index) => (
-            <div key={index} style={{
-              padding: '8px 12px',
-              background: '#fff',
-              borderRadius: '8px',
-              marginBottom: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}>
-              <span>📄</span>
-              <span style={{ flex: 1, fontSize: '0.9rem' }}>{file.name}</span>
-              <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                {(file.size / 1024).toFixed(1)} KB
-              </span>
-            </div>
-          ))}
+      {/* Pal Voice Assistant Controls */}
+      <div style={{ 
+        margin: '24px 0', 
+        padding: '20px', 
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+        borderRadius: '20px', 
+        boxShadow: '0 8px 32px rgba(124,74,253,0.20)',
+        width: '500px',
+        maxWidth: '90vw',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px'
+      }}>
+        <div style={{ color: '#fff', textAlign: 'center' }}>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 600 }}>
+            🤖 Meet Pal - Your AI Assistant
+          </h3>
+          <p style={{ margin: 0, fontSize: '1rem', opacity: 0.9 }}>
+            {sampleMode ? 'Voice conversation demo mode' : 'Connected to full AI system'}
+          </p>
         </div>
-      )}
+        
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {conversationFlow === 'idle' ? (
+            <button
+              onClick={startPalConversation}
+              style={{
+                background: '#fff',
+                color: '#667eea',
+                border: 'none',
+                borderRadius: '25px',
+                padding: '12px 24px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              }}
+              onMouseEnter={e => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+              }}
+              onMouseLeave={e => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+              }}
+            >
+              🎤 Start Conversation with Pal
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                onClick={stopPalConversation}
+                style={{
+                  background: '#ff4757',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '25px',
+                  padding: '12px 24px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}
+                onMouseEnter={e => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+                }}
+                onMouseLeave={e => {
+                  e.target.style.transform = 'translateY(0)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                }}
+              >
+                🛑 Stop Conversation
+              </button>
+              
+              <div style={{
+                background: 'rgba(255,255,255,0.2)',
+                borderRadius: '15px',
+                padding: '8px 16px',
+                color: '#fff',
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                {listening ? (
+                  <>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      background: '#00ff00',
+                      borderRadius: '50%',
+                      animation: 'pulse 1s infinite'
+                    }}></div>
+                    Listening...
+                  </>
+                ) : (
+                  <>
+                    <div style={{
+                      width: '8px',
+                      height: '8px',
+                      background: '#ffa500',
+                      borderRadius: '50%'
+                    }}></div>
+                    {transcribedText || 'Processing...'}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div style={{
+          fontSize: '0.85rem',
+          color: 'rgba(255,255,255,0.8)',
+          textAlign: 'center',
+          fontStyle: 'italic'
+        }}>
+          {conversationFlow === 'active' ? 
+            "Pal is listening and ready to help with your academic questions!" :
+            "Start a natural voice conversation with Pal about your studies"
+          }
+        </div>
+      </div>
+
       {/* Input bar */}
       <form onSubmit={e => { e.preventDefault(); handleAsk(); }} style={{ width: '600px', maxWidth: '90vw', margin: '0 auto', display: 'flex', alignItems: 'center', background: '#fff', borderRadius: '32px', boxShadow: '0 8px 32px rgba(124,74,253,0.10)', padding: '8px 16px', border: '1px solid #f0f0f0' }}>
         <div style={{ display: 'flex', flex: 1, border: '3px solid #fff', borderRadius: '32px', background: '#fff', boxShadow: '0 8px 32px rgba(124,74,253,0.10)', padding: '4px 8px', position: 'relative' }}>
@@ -744,16 +1031,6 @@ function App() {
         </div>
       )}
       
-      {/* Search Results */}
-      {searchResults.length > 0 && (
-        <SearchResults
-          results={searchResults}
-          query={currentQuery}
-          isLoading={isSearching}
-          onAskQuestion={handleAskFromResult}
-        />
-      )}
-
       {/* Conversation Toggle Button */}
       <button 
         onClick={() => setShowConversation(!showConversation)}
