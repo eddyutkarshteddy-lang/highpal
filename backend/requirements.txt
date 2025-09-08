@@ -1,15 +1,29 @@
-fastapi
-uvicorn
-requests
-beautifulsoup4
-PyPDF2
-python-multipart
+# Core FastAPI and server dependencies
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
+
+# OpenAI Integration - Primary AI Service
+openai>=1.30.0
+
+# Document Processing
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+PyPDF2>=3.0.0
+pymupdf>=1.23.0
+pdfplumber>=0.10.0
+pdfminer.six>=20230124
+
+# Database and Storage
+pymongo>=4.5.0
+dnspython>=2.4.0
+redis>=4.6.0
+
+# Legacy dependencies (for gradual migration)
+sentence-transformers>=2.2.0
 haystack-ai
 farm-haystack
 elasticsearch
-sentence-transformers
-pydantic
-python-dotenv
-aiofiles
-pymongo
-dnspython

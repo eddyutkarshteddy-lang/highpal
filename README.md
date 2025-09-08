@@ -1,40 +1,56 @@
-# 🎓 HighPal - AI-Powered Learning Assistant
+# 🎓 HighPal - AI-Powered Educational Assistant
 
-**HighPal** is an intelligent AI assistant designed for students and researchers. Talk to Pal using voice or text, upload documents for context, and get intelligent responses powered by semantic search and machine learning.
+**HighPal** is an emotionally intelligent AI educational assistant designed for exam preparation and personalized learning. With two distinct learning modes, HighPal adapts to your study needs whether you're exploring topics or diving deep into your own materials.
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue)
+![Version](https://img.shields.io/badge/version-3.0.0-blue)
 ![Status](https://img.shields.io/badge/status-active-green)
 ![MongoDB](https://img.shields.io/badge/database-MongoDB%20Atlas-green)
-![AI](https://img.shields.io/badge/AI-Sentence%20Transformers-orange)
+![AI](https://img.shields.io/badge/AI-Multi%20Model%20Integration-orange)
 
 ## ✨ Key Features
 
-- 🎤 **"Pal" Voice Assistant**: Natural conversation with speech-to-text and text-to-speech
-- � **Smart Document Learning**: Upload PDFs and documents to expand Pal's knowledge
-- 🧠 **AI-Powered Responses**: Semantic search with contextual, intelligent answers
-- ☁️ **Cloud Knowledge Base**: MongoDB Atlas for persistent learning and storage  
-- 🌐 **PDF URL Training**: Train Pal using educational PDFs from the web
-- � **Conversation History**: Track and review all your interactions with Pal
-- 📱 **Modern UI**: Clean, focused interface designed for learning
+### 🎤 **Dual Learning Modes**
+- **Learn with Pal**: Open-ended, emotionally intelligent conversation for exam prep
+- **My Book**: Personalized Q&A based on your uploaded study materials
 
-## 🏗️ Simplified Architecture
+### 🧠 **Emotional Intelligence**
+- Adaptive conversation flow based on your confidence and stress levels
+- Memory-driven personalization that remembers your learning patterns
+- Encouragement and motivation tailored to your progress
+
+### 📚 **Smart Content Management** 
+- Public educational content ingestion for comprehensive exam preparation
+- Secure personal document processing with strict scope management
+- Permission-based knowledge expansion between personal and public sources
+
+### 🎯 **Exam Preparation Focus**
+- Specialized support for CAT, GRE, GMAT, and other competitive exams
+- Topic-specific guidance with difficulty progression
+- Comprehensive revision modes with quiz-style assessments
+
+## 🏗️ Enhanced Architecture
 
 ### Frontend (React + Vite)
-- **Framework**: React 19.1.1 with clean, educational-focused UI
-- **Voice Interface**: WebKit Speech Recognition + Web Speech Synthesis for natural conversation
-- **Design**: Purple/blue gradient with focus on conversation flow
+- **Framework**: React 19.1.1 with dual-tab interface design
+- **Tab 1 - Learn with Pal**: Open-ended conversation for exam preparation
+- **Tab 2 - My Book**: Document-focused Q&A with your materials
+- **Voice Interface**: WebKit Speech Recognition + Web Speech Synthesis
+- **Memory Integration**: Persistent user context and learning patterns
 - **Port**: Development server runs on `http://localhost:5173`
 
-### Backend (Training Server)
-- **Single Server**: `training_server.py` - comprehensive FastAPI application
-- **AI/ML**: Sentence Transformers (all-MiniLM-L6-v2) for semantic understanding
-- **PDF Processing**: Advanced multi-library extraction (PyMuPDF, PyPDF2, pdfplumber)
+### Backend (Multi-Service Architecture)
+- **Orchestration Layer**: `training_server.py` - FastAPI application with dual-engine routing
+- **Pal Engine**: Emotionally intelligent conversation manager for exam prep
+- **Book Engine**: Document-scoped Q&A with permission-based knowledge expansion
+- **Memory Engine**: Multi-layered context management (session, personal, knowledge)
+- **AI/ML Stack**: Multi-model integration (local + cloud LLMs, sentence transformers)
 - **Port**: API server runs on `http://localhost:8003`
 
-### Database (MongoDB Atlas)
-- **Knowledge Storage**: Documents and training data for AI responses
-- **Vector Search**: Semantic embeddings for intelligent document retrieval
-- **Conversation History**: Persistent chat history and user interactions
+### Database & Storage
+- **Knowledge Storage**: MongoDB Atlas with vector search capabilities
+- **Memory Management**: Redis for session state, MongoDB for long-term memory
+- **Document Processing**: Advanced multi-format extraction with security scanning
+- **Public Content**: Curated educational materials and exam preparation resources
 
 ## 🚀 Quick Start
 
@@ -79,25 +95,31 @@ npm run dev
 
 ## 📖 How to Use HighPal
 
-### 🎤 Talking to Pal
-1. **Click the microphone button** to start voice conversation
-2. **Ask Pal questions** about any topic - academics, research, general knowledge
-3. **Get intelligent responses** based on Pal's training and your uploaded documents
-4. **View conversation history** by clicking the chat button
+### � **Learn with Pal Tab**
+1. **Start Exam Preparation**: Say "I want to prepare for the CAT exam"
+2. **Guided Learning**: Pal provides topic suggestions and adaptive dialogue
+3. **Memory-Driven Support**: Pal remembers your weak areas and study patterns
+4. **Emotional Intelligence**: Receive encouragement and motivation based on your progress
+5. **Multi-Turn Conversations**: Engage in natural, flowing educational discussions
 
-### 📚 Expanding Pal's Knowledge
-1. **Upload Documents**: Click the **+** button and select PDFs or text files
-2. **Documents are processed** and become part of Pal's knowledge base
-3. **Ask questions** about your uploaded content - Pal will reference them in responses
-4. **Documents persist** across sessions in MongoDB Atlas
+### 📚 **My Book Tab**  
+1. **Upload Your Materials**: Click **+** and select your PDF or Word documents
+2. **Document-Scoped Q&A**: Ask questions strictly from your uploaded content
+3. **Knowledge Expansion**: Grant permission to blend your content with external knowledge
+4. **Revision Mode**: Trigger quiz-style sessions after completing chapters
+5. **Progress Tracking**: Monitor comprehension and receive personalized feedback
 
-### 🧠 Smart AI Responses
-- Pal provides **contextual answers** using semantic search
-- Responses are **natural and conversational**, not just document excerpts
-- **No document lists shown** - focus is on clean AI conversation
-- **Filtered responses** exclude corrupted or error content automatically
-    "https://example.com/whitepaper.pdf"
-### 🌐 Advanced: PDF URL Training
+### 🎤 **Voice Interaction**
+1. **Click the microphone** to start voice conversation in either tab
+2. **Natural Speech**: Talk to Pal as you would with a human tutor
+3. **Context Awareness**: Pal maintains conversation context across interactions
+4. **Text-to-Speech**: Listen to responses with emotionally appropriate tone
+
+### 🧠 **Memory & Personalization**
+- **Learning Patterns**: Pal tracks your study habits and preferences
+- **Difficulty Adaptation**: Content difficulty adjusts based on your performance
+- **Personal Anecdotes**: Share stories that Pal remembers for better rapport
+- **Cross-Session Continuity**: Pick up conversations where you left off
 Train Pal with educational content from the web:
 ```bash
 POST http://localhost:8003/train/pdf-urls

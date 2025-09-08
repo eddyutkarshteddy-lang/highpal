@@ -1,17 +1,25 @@
 # 📡 HighPal API Documentation
 
-**Version:** 2.0.0  
+**Version:** 3.0.0  
 **Base URL:** `http://localhost:8003`  
-**Server:** FastAPI with automatic OpenAPI docs at `/docs`
+**Server:** FastAPI with dual-engine architecture and automatic OpenAPI docs at `/docs`
 
 ---
 
 ## 🌐 API Overview
 
-HighPal provides a RESTful API for document management, AI-powered search, and question answering. All endpoints support CORS and return JSON responses.
+HighPal provides a RESTful API for dual-mode educational assistance: open-ended exam preparation with "Learn with Pal" and document-focused learning with "My Book". The API supports emotionally intelligent conversations, memory management, and secure document processing.
+
+### Architecture
+- **Orchestration Layer**: FastAPI routing between Pal Engine and Book Engine
+- **Pal Engine**: Handles exam preparation and open-ended learning conversations
+- **Book Engine**: Manages document-scoped Q&A and revision modes
+- **Memory Engine**: Multi-layered context management across sessions
 
 ### Authentication
-Currently, no authentication is required for local development. Production deployment will include JWT token authentication.
+JWT token authentication for production. Local development supports demo mode.
+- **Guest Mode**: Limited functionality without memory persistence
+- **Authenticated Mode**: Full memory integration and personalization
 
 ### Content-Type
 - **Uploads:** `multipart/form-data`  
@@ -25,15 +33,18 @@ Currently, no authentication is required for local development. Production deplo
 ### 🏥 Health & Status
 
 #### `GET /health`
-Check server health and database connectivity.
+Check server health, database connectivity, and engine status.
 
 **Response:**
 ```json
 {
   "status": "healthy",
   "mongodb": "connected",
-  "training_ready": true,
-  "timestamp": "2025-09-03T17:38:47.821432"
+  "redis": "connected",
+  "pal_engine": "ready",
+  "book_engine": "ready",
+  "memory_engine": "ready",
+  "timestamp": "2025-09-07T17:38:47.821432"
 }
 ```
 
@@ -43,247 +54,273 @@ Get API overview and available endpoints.
 **Response:**
 ```json
 {
-  "message": "HighPal AI Assistant - Training Edition",
-  "version": "2.0.0",
+  "message": "HighPal AI Educational Assistant",
+  "version": "3.0.0",
   "status": "running",
+  "modes": [
+    "Learn with Pal - Exam preparation and open dialogue",
+    "My Book - Document-focused Q&A and revision"
+  ],
   "features": [
-    "Document upload and processing",
-    "AI-powered semantic search", 
-    "PDF URL training",
-    "Background task processing"
+    "Emotionally intelligent conversations",
+    "Memory-driven personalization", 
+    "Dual-mode learning support",
+    "Secure document processing",
+    "Multi-model AI integration"
   ],
   "endpoints": {
     "docs": "/docs",
     "health": "/health",
-    "upload": "/upload",
-    "search": "/search",
-    "ask_question": "/ask_question"
+    "pal": "/pal",
+    "book": "/book",
+    "memory": "/memory"
   }
 }
 ```
 
 ---
 
-## 📄 Document Management
+## 🎯 Learn with Pal Endpoints
 
-### `POST /upload`
-Upload a document (PDF, image, or text file).
+### `POST /pal/conversation`
+Start or continue an open-ended educational conversation.
+
+**Request:**
+```json
+{
+  "message": "I want to prepare for the CAT exam",
+  "user_id": "user123",
+  "context": {
+    "emotional_state": "confident",
+    "session_type": "exam_prep"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "response": "Great choice! CAT has three main sections: Quantitative Ability, Verbal Ability, and Data Interpretation. Based on your previous sessions, I remember you found quantitative topics challenging. Which area would you like to focus on today?",
+  "emotional_tone": "encouraging",
+  "suggested_topics": ["Quantitative Ability", "Verbal Ability", "Data Interpretation"],
+  "memory_context": {
+    "remembered_topics": ["previous difficulty with algebra"],
+    "study_streak": 5
+  },
+  "conversation_id": "conv_789"
+}
+```
+
+### `GET /pal/exams`
+Get supported exam types and preparation materials.
+
+**Response:**
+```json
+{
+  "supported_exams": [
+    {
+      "name": "CAT",
+      "full_name": "Common Admission Test",
+      "sections": ["Quantitative Ability", "Verbal Ability", "Data Interpretation"],
+      "preparation_materials": 1250
+    },
+    {
+      "name": "GRE", 
+      "full_name": "Graduate Record Examination",
+      "sections": ["Verbal Reasoning", "Quantitative Reasoning", "Analytical Writing"],
+      "preparation_materials": 890
+    }
+  ]
+}
+```
+
+---
+
+## 📚 My Book Endpoints
+
+### `POST /book/upload`
+Upload personal study materials with security scanning.
 
 **Request:**
 - **Method:** POST
 - **Content-Type:** multipart/form-data
 - **Parameters:**
-  - `file` (required): The document file
-  - `title` (optional): Custom title for the document
-
-**Example:**
-```bash
-curl -X POST http://localhost:8003/upload \
-  -F "file=@document.pdf" \
-  -F "title=My Research Paper"
-```
+  - `file` (required): PDF or Word document
+  - `user_id` (required): User identifier
+  - `scope` (optional): "document_only" or "expandable" (default: "document_only")
 
 **Response:**
 ```json
 {
   "success": true,
-  "document_id": "a1b2c3d4e5f6...",
-  "filename": "document.pdf",
-  "size": 245760,
-  "message": "Document uploaded successfully"
+  "document_id": "book_a1b2c3d4e5f6",
+  "filename": "calculus_textbook.pdf",
+  "size": 2457600,
+  "processing_status": "completed",
+  "scope": "document_only",
+  "chapters_detected": 12,
+  "question_bank_generated": true
 }
 ```
 
-### `GET /documents`
-List all uploaded documents with optional filtering.
+### `POST /book/question`
+Ask questions about uploaded documents with scope management.
 
-**Parameters:**
-- `limit` (optional): Number of documents to return (default: 20)
-- `source_type` (optional): Filter by source type
+**Request:**
+```json
+{
+  "question": "Explain the concept of limits in calculus",
+  "document_id": "book_a1b2c3d4e5f6",
+  "user_id": "user123",
+  "allow_external": false
+}
+```
 
 **Response:**
 ```json
 {
-  "documents": [
+  "answer": "According to your textbook (Chapter 2, page 45), a limit describes the value that a function approaches as the input approaches some value...",
+  "source": "document_only",
+  "page_references": [45, 46, 47],
+  "confidence": 0.92,
+  "external_available": true,
+  "external_prompt": "I can provide broader context about limits and their applications in machine learning. Would you like me to access external knowledge?"
+}
+```
+
+### `POST /book/expand_knowledge`
+Grant permission to blend document content with external knowledge.
+
+**Request:**
+```json
+{
+  "document_id": "book_a1b2c3d4e5f6",
+  "user_id": "user123",
+  "permission_granted": true,
+  "scope": "session"
+}
+```
+
+### `POST /book/revision`
+Start revision mode with quiz-style questions.
+
+**Request:**
+```json
+{
+  "document_id": "book_a1b2c3d4e5f6",
+  "chapter": 5,
+  "difficulty": "adaptive",
+  "question_count": 10
+}
+```
+
+**Response:**
+```json
+{
+  "revision_session_id": "rev_xyz789",
+  "questions": [
     {
-      "id": "document_id_123",
-      "content_preview": "This document discusses...",
-      "metadata": {
-        "filename": "research.pdf",
-        "file_size": 245760,
-        "upload_date": "2025-09-03T10:30:00Z",
-        "source_type": "manual_upload"
-      }
+      "id": "q1",
+      "question": "What is the derivative of x²?",
+      "type": "multiple_choice",
+      "options": ["2x", "x", "2", "x²"],
+      "page_reference": 67
     }
   ],
-  "count": 1,
-  "filter": {}
+  "estimated_duration": "15 minutes"
 }
 ```
 
 ---
 
-## 🔍 Search & Query
+## 🧠 Memory Management Endpoints
 
-### `GET /search`
-Search through uploaded documents using semantic similarity.
-
-**Parameters:**
-- `q` (required): Search query
-- `limit` (optional): Number of results (default: 10)
-
-**Example:**
-```bash
-curl "http://localhost:8003/search?q=machine%20learning&limit=5"
-```
+### `GET /memory/profile/{user_id}`
+Retrieve user's learning profile and memory context.
 
 **Response:**
 ```json
 {
-  "query": "machine learning",
-  "results": [
-    {
-      "content": "Machine learning is a method of data analysis...",
-      "score": 0.89,
-      "filename": "ml_paper.pdf",
-      "metadata": {...}
-    }
-  ],
-  "count": 5
-}
-```
-
-### `POST /ask_question`
-Ask a question about uploaded documents using AI.
-
-**Request Body:**
-```json
-{
-  "question": "What is machine learning?",
-  "uploaded_files": ["doc_id_1", "doc_id_2"]
-}
-```
-
-**Response:**
-```json
-{
-  "question": "What is machine learning?",
-  "answer": "Based on the available documents, machine learning is...",
-  "search_results": [
-    {
-      "content": "Document excerpt...",
-      "score": 0.89,
-      "metadata": {
-        "filename": "ml_basics.pdf",
-        "source": "upload",
-        "method": "semantic_search"
-      }
-    }
-  ],
-  "sources_found": 3,
-  "confidence": "high"
-}
-```
-
-### `GET /ask_question`
-Alternative GET method for simple questions.
-
-**Parameters:**
-- `q` or `question`: The question to ask
-
-**Example:**
-```bash
-curl "http://localhost:8003/ask_question?q=What%20is%20AI?"
-```
-
----
-
-## 🎓 Training Features
-
-### `POST /train/pdf-urls`
-Train the AI using PDFs from public URLs.
-
-**Request Body:**
-```json
-{
-  "urls": [
-    "https://arxiv.org/pdf/2023.12345.pdf",
-    "https://example.com/whitepaper.pdf"
-  ],
-  "metadata": {
-    "domain": "research",
-    "priority": "high"
+  "user_id": "user123",
+  "learning_profile": {
+    "preferred_learning_style": "visual",
+    "strong_subjects": ["mathematics", "physics"],
+    "challenging_topics": ["organic chemistry", "statistics"],
+    "study_streak": 7,
+    "total_sessions": 45
+  },
+  "emotional_patterns": {
+    "confidence_trend": "improving",
+    "stress_indicators": ["late_night_sessions"],
+    "motivation_triggers": ["progress_visualization", "peer_comparison"]
+  },
+  "conversation_context": {
+    "recent_topics": ["calculus limits", "CAT preparation"],
+    "unresolved_questions": 2,
+    "scheduled_reviews": ["algebra_basics", "reading_comprehension"]
   }
 }
 ```
 
-**Response:**
+### `POST /memory/update`
+Update user memory with new learning data.
+
+**Request:**
 ```json
 {
-  "status": "success",
-  "processed_urls": 2,
-  "failed_urls": 0,
-  "documents_added": 2,
-  "processing_time": "45.2s"
+  "user_id": "user123",
+  "memory_type": "topic_mastery",
+  "data": {
+    "topic": "calculus_limits",
+    "mastery_level": 0.75,
+    "session_feedback": "understood basic concept, needs more practice",
+    "emotional_state": "confident"
+  }
 }
 ```
-
-### `POST /train/pdf-urls/background`
-Start background training process (non-blocking).
-
-**Request:** Same as `/train/pdf-urls`
-
-**Response:**
-```json
-{
-  "status": "started",
-  "task_id": "train_task_123",
-  "message": "Training started in background",
-  "estimated_time": "60s"
-}
-```
-
-### `GET /train/status`
-Get training system status and statistics.
-
-**Response:**
-```json
-{
-  "total_documents": 150,
-  "total_embeddings": 150,
-  "last_training": "2025-09-03T15:30:00Z",
-  "system_status": "ready",
-  "active_tasks": 0
-}
-```
-
-### `GET /training-guide`
-Get detailed training usage examples and workflow.
 
 ---
 
-## 🛠️ Error Handling
+## ⚠️ Error Handling & Edge Cases
 
-### HTTP Status Codes
-- **200:** Success
-- **400:** Bad Request (missing parameters, invalid JSON)
-- **404:** Not Found (endpoint doesn't exist)
-- **500:** Internal Server Error (database issues, processing errors)
-
-### Error Response Format
+### Standard Error Response
 ```json
 {
-  "error": "Description of the error",
-  "status": "error",
-  "timestamp": "2025-09-03T17:45:00Z"
+  "error": {
+    "code": "DOCUMENT_PROCESSING_FAILED",
+    "message": "Unable to extract text from uploaded PDF",
+    "details": "File may be corrupted or password-protected",
+    "suggested_action": "Try uploading a different file or contact support"
+  },
+  "fallback_options": [
+    "manual_text_input",
+    "ocr_processing",
+    "alternative_format"
+  ]
 }
 ```
 
-### Common Errors
-- **MongoDB Connection:** `"Database connection not available"`
-- **File Upload:** `"File type not supported"`
-- **Search:** `"No documents found matching query"`
-- **Training:** `"Failed to download PDF from URL"`
+### Engine Fallback Logic
+- **Pal Engine Unavailable**: Fall back to basic Q&A mode
+- **Book Engine Unavailable**: Redirect to general document search
+- **Memory Engine Unavailable**: Continue with session-only memory
+- **External LLM Unavailable**: Use local models with reduced capability notice
+
+---
+
+## 🔒 Security & Privacy
+
+### Data Classification
+- **Public Content**: Freely accessible exam preparation materials
+- **Personal Memory**: Encrypted user learning patterns and preferences  
+- **User Documents**: Encrypted with user-controlled access
+- **Conversation History**: Optional local storage with user consent
+
+### Privacy Controls
+- **Memory Opt-out**: Users can disable memory tracking
+- **Data Export**: Full user data export in standard formats
+- **Selective Deletion**: Granular control over stored information
+- **Anonymous Mode**: Basic functionality without data persistence
 
 ---
 
@@ -294,47 +331,24 @@ Get detailed training usage examples and workflow.
 curl http://localhost:8003/health
 ```
 
-### Upload a Test Document
+### Test Pal Conversation
 ```bash
-curl -X POST http://localhost:8003/upload \
-  -F "file=@test.pdf"
-```
-
-### Search Test
-```bash
-curl "http://localhost:8003/search?q=test"
-```
-
-### Q&A Test
-```bash
-curl -X POST http://localhost:8003/ask_question \
+curl -X POST http://localhost:8003/pal/conversation \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is this document about?"}'
+  -d '{"message": "I want to prepare for CAT exam", "user_id": "test_user"}'
 ```
 
----
+### Test Book Upload
+```bash
+curl -X POST http://localhost:8003/book/upload \
+  -F "file=@textbook.pdf" \
+  -F "user_id=test_user"
+```
 
-## 🔧 Development Notes
-
-### Local Development
-- Server runs on port **8003** (not 8000)
-- MongoDB Atlas connection required
-- CORS enabled for all origins in development
-
-### Frontend Integration
-- React app connects to `http://localhost:8003`
-- All endpoints support preflight CORS requests
-- File uploads use FormData with proper content types
-
-### Performance
-- Semantic search uses 384-dimensional embeddings
-- Average response time: <2s for search, <5s for Q&A
-- Supports concurrent requests with FastAPI async
-
-### Logging
-- All requests logged with timestamps
-- Error details logged to console
-- MongoDB operations tracked
+### Test Memory Profile
+```bash
+curl http://localhost:8003/memory/profile/test_user
+```
 
 ---
 
@@ -343,10 +357,10 @@ curl -X POST http://localhost:8003/ask_question \
 - **Interactive Docs:** http://localhost:8003/docs (Swagger UI)
 - **OpenAPI Schema:** http://localhost:8003/openapi.json
 - **Health Dashboard:** http://localhost:8003/health
-- **Training Guide:** http://localhost:8003/training-guide
+- **Engine Status:** http://localhost:8003/engines/status
 
 ---
 
-**Last Updated:** September 3, 2025  
-**API Version:** 2.0.0  
+**Last Updated:** September 7, 2025  
+**API Version:** 3.0.0  
 **Maintained by:** HighPal Development Team

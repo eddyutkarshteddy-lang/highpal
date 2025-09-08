@@ -1,7 +1,8 @@
 {
-  "name": "model",
+  "name": "highpal-educational-assistant",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.0",
+  "description": "AI-Powered Educational Assistant with Dual Learning Modes",
   "type": "module",
   "scripts": {
     "dev": "vite",
