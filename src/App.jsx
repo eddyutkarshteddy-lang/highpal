@@ -1,8 +1,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
+import RevisionMode from './components/RevisionMode';
 
 function App() {
+  const [currentView, setCurrentView] = useState('landing'); // 'landing', 'chat', 'revision'
+  const [chatMode, setChatMode] = useState('pal'); // 'pal' or 'book'
   const [showDropdown, setShowDropdown] = useState(false);
   const [question, setQuestion] = useState('');
   const [response, setResponse] = useState('');
@@ -585,8 +588,104 @@ function App() {
     );
   };
 
+  // Landing Page Component
+  if (currentView === 'landing') {
+    return (
+      <div className="landing-page">
+        {/* HighPal Logo - Top Left */}
+        <div className="header">
+          <span className="logo">HighPal</span>
+        </div>
+
+        {/* Main Content - Two Columns */}
+        <div className="main-content">
+          <div className="welcome-section">
+            <h1 className="main-title">
+              Don't just cram. <span className="highlight">HighPal it!</span>
+            </h1>
+            <p className="subtitle">Find your way, Pal has the map!</p>
+          </div>
+
+          <div className="columns-container">
+            {/* Learn with Pal Column */}
+            <div 
+              className="learning-column learn-with-pal-column"
+              onClick={() => {
+                setChatMode('pal');
+                setCurrentView('chat');
+              }}
+            >
+              <div className="column-icon">🎓</div>
+              <h2 className="column-title">Learn with Pal</h2>
+              <p className="column-description">
+                Speak your question, hear your solution!
+              </p>
+              <button className="cta-button">Start Learning →</button>
+            </div>
+
+            {/* Learn from My Book Column */}
+            <div 
+              className="learning-column my-book-column"
+              onClick={() => {
+                setChatMode('book');
+                setCurrentView('chat');
+              }}
+            >
+              <div className="column-icon">📚</div>
+              <h2 className="column-title">Learn from My Book</h2>
+              <p className="column-description">
+                From textbooks to clarity—Pal helps.
+              </p>
+              <button className="cta-button">Upload & Learn →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
   <div style={{ minHeight: '100vh', width: '100vw', background: 'radial-gradient(circle at 10% 10%, #f6f8fc 0%, #fff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, Helvetica, sans-serif', paddingTop: '40px', position: 'relative' }}>
+      
+      {/* Back arrow - centered below Highpal logo */}
+      <button 
+        onClick={() => setCurrentView('landing')}
+        style={{
+          position: 'absolute',
+          top: '90px',
+          left: '48px',
+          transform: 'translateX(50%)',
+          background: '#5B3FFF',
+          border: 'none',
+          color: 'white',
+          fontSize: '20px',
+          cursor: 'pointer',
+          zIndex: 10,
+          transition: 'all 0.3s ease',
+          padding: '4px',
+          borderRadius: '50%',
+          width: '32px',
+          height: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 2px 8px rgba(91, 63, 255, 0.3)'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.background = '#7c4afd';
+          e.target.style.transform = 'translateX(50%) scale(1.1)';
+          e.target.style.boxShadow = '0 4px 12px rgba(91, 63, 255, 0.4)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.background = '#5B3FFF';
+          e.target.style.transform = 'translateX(50%) scale(1)';
+          e.target.style.boxShadow = '0 2px 8px rgba(91, 63, 255, 0.3)';
+        }}
+        title="Back to Home"
+      >
+        ←
+      </button>
+
       {/* Login/User section top right */}
       <div style={{ position: 'absolute', top: 40, right: 48, zIndex: 10 }}>
         {user ? (
@@ -665,12 +764,16 @@ function App() {
       <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'center' }}>
   <span style={{ background: '#fff', borderRadius: '24px', boxShadow: '0 2px 12px rgba(80,80,180,0.08)', padding: '10px 32px', fontSize: '1.1rem', color: '#5b5b8a', fontWeight: 500, letterSpacing: '0.01em', border: '3px solid #7B61FF', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2v2m0 16v2m8-10h2M2 12H4m15.07-7.07l-1.41 1.41M6.34 17.66l-1.41 1.41M17.66 17.66l-1.41-1.41M6.34 6.34L4.93 4.93" stroke="#7c7cf0" strokeWidth="2" strokeLinecap="round"/></svg>
-          Instant, Reliable Academic Help
+          {chatMode === 'pal' ? 'Got doubts? Let\'s untangle them together!' : 'Upload your documents and start learning!'}
         </span>
       </div>
       {/* Main heading */}
       <h1 style={{ fontWeight: 700, fontSize: '4rem', color: '#181c2a', textAlign: 'center', marginBottom: '32px', letterSpacing: '-2px', lineHeight: 1.1 }}>
-        Don't just cram. <span style={{ color: '#7c4afd' }}>Highpal it!</span>
+        {chatMode === 'pal' ? (
+          <>Have a question? <span style={{ color: '#7c4afd' }}>Pal is here.</span></>
+        ) : (
+          <>Let's explore your <span style={{ color: '#7c4afd' }}>study materials!</span></>
+        )}
       </h1>
       {/* Mic icon */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
@@ -934,6 +1037,41 @@ function App() {
               disabled={uploading}
             />
           </label>
+          
+          {/* Revision Mode Button */}
+          {chatMode === 'book' && uploadedFiles.length > 0 && (
+            <button
+              onClick={() => setCurrentView('revision')}
+              style={{
+                background: 'linear-gradient(135deg, #ff6b6b, #ff5722)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                fontSize: '0.9rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                marginLeft: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                boxShadow: '0 2px 8px rgba(255, 107, 107, 0.3)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={e => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 4px 12px rgba(255, 107, 107, 0.4)';
+              }}
+              onMouseLeave={e => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 2px 8px rgba(255, 107, 107, 0.3)';
+              }}
+              title="Start revision quiz based on your uploaded documents"
+            >
+              📝 Quiz Me
+            </button>
+          )}
+          
           <input
             type="text"
             value={question}

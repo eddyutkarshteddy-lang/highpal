@@ -7,6 +7,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
 import logging
 import os
 from datetime import datetime
@@ -44,6 +45,26 @@ except ImportError as e:
                 'best_text': 'PDF extraction libraries not available. Please install PyMuPDF, PyPDF2, pdfplumber, and pdfminer to enable PDF processing.', 
                 'extraction_info': {'method': 'fallback', 'status': 'error', 'error': 'Missing dependencies'}
             }  # No-op fallback
+
+class TrainingResponse(BaseModel):
+    message: str
+    status: str
+
+# Additional models for revision feature
+class RevisionRequest(BaseModel):
+    document_id: str
+    chapter: Optional[str] = None
+    difficulty: str = "adaptive"  # easy, medium, hard, adaptive
+    question_count: int = 10
+
+class QuizAnswer(BaseModel):
+    question_id: str
+    user_answer: str
+    time_taken: Optional[int] = None  # seconds
+
+class RevisionSubmission(BaseModel):
+    revision_session_id: str
+    answers: List[QuizAnswer]
 
 # Pydantic models for request/response
 class QuestionRequest(BaseModel):
@@ -363,6 +384,281 @@ async def training_guide():
             "7. Model is ready for improved searches"
         ]
     }
+
+# ===============================================
+# 📚 REVISION FEATURE ENDPOINTS
+# ===============================================
+
+@app.post("/book/revision")
+async def start_revision_session(request: RevisionRequest):
+    """
+    Start a revision session with quiz-style questions from uploaded document
+    """
+    try:
+        # Check if document exists
+        haystack_mongo = haystack_integration if hasattr(globals(), 'haystack_integration') and haystack_integration else None
+        if not haystack_mongo:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "Document processing service not available"}
+            )
+        
+        # Get document content
+        doc_search = await haystack_mongo.search_documents(
+            query=f"document:{request.document_id}",
+            top_k=20
+        )
+        
+        if not doc_search or len(doc_search.get('documents', [])) == 0:
+            return JSONResponse(
+                status_code=404,
+                content={"error": f"Document {request.document_id} not found"}
+            )
+        
+        # Generate quiz questions from document content
+        questions = await generate_quiz_questions(
+            documents=doc_search['documents'],
+            chapter=request.chapter,
+            difficulty=request.difficulty,
+            count=request.question_count
+        )
+        
+        # Create revision session ID
+        session_id = f"rev_{hashlib.md5(f'{request.document_id}_{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
+        
+        # Store session data (in production, this would go to database)
+        # For now, we'll return the questions directly
+        
+        return {
+            "revision_session_id": session_id,
+            "document_id": request.document_id,
+            "questions": questions,
+            "estimated_duration": f"{len(questions) * 2} minutes",
+            "difficulty": request.difficulty,
+            "instructions": "Answer each question based on the content from your uploaded document. Take your time and think carefully."
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating revision session: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to create revision session", "details": str(e)}
+        )
+
+@app.post("/book/revision/submit")
+async def submit_revision_answers(submission: RevisionSubmission):
+    """
+    Submit answers for revision session and get feedback
+    """
+    try:
+        # In a real implementation, you'd retrieve the correct answers from database
+        # For now, we'll provide sample feedback
+        
+        feedback = await evaluate_revision_answers(submission)
+        
+        return {
+            "revision_session_id": submission.revision_session_id,
+            "total_questions": len(submission.answers),
+            "score": feedback['score'],
+            "percentage": feedback['percentage'],
+            "feedback": feedback['detailed_feedback'],
+            "strengths": feedback['strengths'],
+            "areas_for_improvement": feedback['areas_for_improvement'],
+            "recommended_topics": feedback['recommended_topics'],
+            "next_steps": feedback['next_steps']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error evaluating revision submission: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to evaluate answers", "details": str(e)}
+        )
+
+@app.get("/book/revision/{session_id}")
+async def get_revision_session(session_id: str):
+    """
+    Get revision session details and questions
+    """
+    try:
+        # In production, retrieve from database
+        return {
+            "revision_session_id": session_id,
+            "status": "active",
+            "message": "Revision session details would be retrieved from database"
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving revision session: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to retrieve revision session"}
+        )
+
+# ===============================================
+# 📚 REVISION HELPER FUNCTIONS
+# ===============================================
+
+async def generate_quiz_questions(documents: List[Dict], chapter: str = None, difficulty: str = "adaptive", count: int = 10) -> List[Dict]:
+    """
+    Generate quiz questions from document content
+    """
+    try:
+        # Extract relevant content
+        content = ""
+        for doc in documents[:5]:  # Use first 5 documents to avoid token limits
+            content += doc.get('content', '') + "\n\n"
+        
+        if len(content.strip()) == 0:
+            return [{
+                "id": "q1",
+                "question": "What is the main topic discussed in your document?",
+                "type": "open_ended",
+                "explanation": "This is a general question to help you review the document content.",
+                "difficulty": "easy"
+            }]
+        
+        # Generate different types of questions based on content
+        questions = []
+        content_sample = content[:2000]  # Limit content length
+        
+        # Sample questions (in production, these would be generated using AI)
+        base_questions = [
+            {
+                "id": f"q{i+1}",
+                "question": f"Based on the document content, what is the main concept discussed in {'chapter ' + chapter if chapter else 'the material'}?",
+                "type": "open_ended",
+                "explanation": "This question tests your understanding of the core concepts.",
+                "difficulty": difficulty,
+                "content_reference": content_sample[:200] + "..."
+            }
+            for i in range(min(count, 3))
+        ]
+        
+        # Add multiple choice questions
+        if count > 3:
+            mc_questions = [
+                {
+                    "id": f"q{len(base_questions)+i+1}",
+                    "question": f"Which of the following best describes the content in your document?",
+                    "type": "multiple_choice",
+                    "options": [
+                        "Educational material with detailed explanations",
+                        "Technical documentation with procedures",
+                        "Research paper with findings",
+                        "General information and guidelines"
+                    ],
+                    "correct_answer": "Educational material with detailed explanations",
+                    "explanation": "This tests your ability to categorize the document content.",
+                    "difficulty": difficulty
+                }
+                for i in range(min(count - len(base_questions), 3))
+            ]
+            questions.extend(mc_questions)
+        
+        # Add true/false questions
+        remaining = count - len(questions)
+        if remaining > 0:
+            tf_questions = [
+                {
+                    "id": f"q{len(questions)+i+1}",
+                    "question": "The document contains information that can help with exam preparation.",
+                    "type": "true_false",
+                    "correct_answer": "true",
+                    "explanation": "Most educational documents are designed to help with learning and exam preparation.",
+                    "difficulty": "easy"
+                }
+                for i in range(min(remaining, 2))
+            ]
+            questions.extend(tf_questions)
+        
+        return questions[:count]
+        
+    except Exception as e:
+        logger.error(f"Error generating quiz questions: {e}")
+        return [
+            {
+                "id": "q1",
+                "question": "What did you learn from this document?",
+                "type": "open_ended",
+                "explanation": "Reflect on the key takeaways from your study material.",
+                "difficulty": "easy"
+            }
+        ]
+
+async def evaluate_revision_answers(submission: RevisionSubmission) -> Dict[str, Any]:
+    """
+    Evaluate student answers and provide feedback
+    """
+    try:
+        total_questions = len(submission.answers)
+        
+        # Sample evaluation logic (in production, this would be more sophisticated)
+        correct_count = 0
+        detailed_feedback = []
+        
+        for answer in submission.answers:
+            # Sample feedback logic
+            is_correct = len(answer.user_answer.strip()) > 10  # Simple check for effort
+            if is_correct:
+                correct_count += 1
+            
+            feedback_item = {
+                "question_id": answer.question_id,
+                "user_answer": answer.user_answer,
+                "is_correct": is_correct,
+                "feedback": "Good effort! Your answer shows understanding." if is_correct else "Try to provide more detailed explanation.",
+                "time_taken": answer.time_taken
+            }
+            detailed_feedback.append(feedback_item)
+        
+        percentage = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+        
+        # Generate overall feedback
+        if percentage >= 80:
+            overall_feedback = "Excellent work! You have a strong understanding of the material."
+            strengths = ["Clear understanding of concepts", "Detailed responses", "Good retention"]
+        elif percentage >= 60:
+            overall_feedback = "Good job! You understand most concepts but there's room for improvement."
+            strengths = ["Basic understanding demonstrated", "Effort in responses"]
+        else:
+            overall_feedback = "Keep studying! Focus on understanding the core concepts better."
+            strengths = ["Attempted all questions", "Shows willingness to learn"]
+        
+        return {
+            "score": f"{correct_count}/{total_questions}",
+            "percentage": round(percentage, 1),
+            "detailed_feedback": detailed_feedback,
+            "overall_feedback": overall_feedback,
+            "strengths": strengths,
+            "areas_for_improvement": [
+                "Provide more detailed explanations",
+                "Review key concepts from the document",
+                "Practice explaining ideas in your own words"
+            ],
+            "recommended_topics": [
+                "Re-read challenging sections",
+                "Create summary notes",
+                "Try additional practice questions"
+            ],
+            "next_steps": [
+                "Review areas where you scored lower",
+                "Take notes on key concepts",
+                "Try another revision session in a few days"
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error evaluating answers: {e}")
+        return {
+            "score": "0/0",
+            "percentage": 0,
+            "detailed_feedback": [],
+            "overall_feedback": "Unable to evaluate answers due to technical error.",
+            "strengths": [],
+            "areas_for_improvement": [],
+            "recommended_topics": [],
+            "next_steps": []
+        }
 
 if __name__ == "__main__":
     import uvicorn
