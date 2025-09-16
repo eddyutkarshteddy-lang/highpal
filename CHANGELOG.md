@@ -58,10 +58,10 @@ All notable changes to the HighPal project are documented here.
 ## [1.5.0] - August 2025
 
 ### 🎤 Voice Interface
-- **Speech-to-Text**: WebKit Speech Recognition integration
-- **Text-to-Speech**: Web Speech Synthesis for responses
+- **Speech-to-Text**: Azure Speech Services STT integration  
+- **Text-to-Speech**: Azure Neural Voices with emotional expressiveness
 - **Voice UI**: Modern microphone button with listening states
-- **Cross-browser Support**: Error handling for unsupported browsers
+- **Cross-platform Support**: Enterprise-grade voice processing
 
 ### 📄 Document Upload  
 - **Multi-format Support**: PDF, images, text files

@@ -14,10 +14,32 @@ from datetime import datetime
 import hashlib
 import io
 import json
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize OpenAI client
+try:
+    from openai import OpenAI
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise Exception("OPENAI_API_KEY not found in environment variables")
+    if not api_key.startswith(('sk-', 'sk-proj-')):
+        raise Exception(f"Invalid API key format. Key starts with: {api_key[:10]}...")
+    
+    openai_client = OpenAI(api_key=api_key)
+    OPENAI_AVAILABLE = True  # Enable OpenAI for GPT-4
+    logger.info("✅ OpenAI client initialized with GPT-4 support")
+    logger.info(f"API key loaded: {api_key[:10]}...{api_key[-4:]}")
+except Exception as e:
+    logger.warning(f"⚠️ OpenAI not available: {e}")
+    OPENAI_AVAILABLE = False
+    openai_client = None
 
 # Import training capabilities (optional)
 try:
@@ -141,9 +163,33 @@ async def health_check():
     return {
         "status": "healthy",
         "mongodb": mongo_status,
+        "openai": "connected" if OPENAI_AVAILABLE else "disconnected",
         "training_ready": mongo_status == "connected",
         "timestamp": datetime.now().isoformat()
     }
+
+@app.get("/test-openai")
+async def test_openai():
+    """Test OpenAI API connectivity"""
+    if not OPENAI_AVAILABLE:
+        raise HTTPException(status_code=503, detail="OpenAI not available")
+    
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+            messages=[
+                {"role": "user", "content": "Say 'GPT-4 connection test successful! HighPal is ready for advanced educational assistance.' in a friendly way."}
+            ],
+            max_completion_tokens=50
+        )
+        return {
+            "status": "success",
+            "response": response.choices[0].message.content,
+            "model": "gpt-4o"  # Updated model info
+        }
+    except Exception as e:
+        logger.error(f"OpenAI test failed: {e}")
+        raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
 
 @app.post("/upload")
 async def upload_file(
@@ -245,6 +291,75 @@ async def search_documents(q: str, limit: int = 10):
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/gpt4-chat")
+async def gpt4_enhanced_chat(request: QuestionRequest):
+    """Enhanced chat endpoint using GPT-4 with emotional intelligence"""
+    try:
+        query = request.question.strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Question cannot be empty")
+        
+        logger.info(f"GPT-4 Chat request: {query}")
+        
+        if not OPENAI_AVAILABLE:
+            raise HTTPException(status_code=503, detail="GPT-4 service not available")
+        
+        # Enhanced system prompt for educational assistance
+        system_prompt = """You are Pal, the friendly AI educational assistant from HighPal! You're here to make learning enjoyable and help students excel in competitive exams like JEE, NEET, CAT, UPSC, GATE, and all academic subjects.
+
+🌟 YOUR PERSONALITY:
+- Warm, friendly, and encouraging
+- Always start with "Hi! Your Pal is here to help! 😊" or similar greeting
+- Use phrases like "Great question!", "Let's explore this!", "You're doing amazing!"
+- End with encouragement like "Keep up the excellent work!", "You've got this!", "Feel free to ask more!"
+
+� YOUR EXPERTISE:
+- Deep knowledge in competitive exams and academic subjects
+- Break down complex topics into simple, digestible steps
+- Provide practical examples and real-world applications
+- Share effective study strategies and exam tips
+
+💡 RESPONSE FORMAT:
+1. Friendly greeting acknowledging their question
+2. Clear, step-by-step explanation with examples
+3. Practical tips or applications when relevant
+4. Encouraging closing statement with emojis
+
+Always maintain your supportive Pal personality while providing accurate, helpful educational content!"""
+        
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": query}
+                ],
+                max_completion_tokens=1000,
+                temperature=0.7,
+                presence_penalty=0.1,
+                frequency_penalty=0.1
+            )
+            
+            answer = response.choices[0].message.content
+            
+            return {
+                "question": query,
+                "answer": answer,
+                "model": "gpt-4o",
+                "timestamp": datetime.now().isoformat(),
+                "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
+            }
+            
+        except Exception as e:
+            logger.error(f"GPT-4 API error: {e}")
+            raise HTTPException(status_code=500, detail=f"GPT-4 processing error: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"GPT-4 chat error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/ask_question/")
 @app.post("/ask_question")
 @app.get("/ask_question")
@@ -268,7 +383,7 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             # Fallback response when MongoDB is not available
             return {
                 "question": query,
-                "answer": f"Hello! I'm Pal, your AI learning assistant. You asked: '{query}'. While I can't access the document database right now, I'm here to help you with your studies! Please try uploading some documents first.",
+                "answer": f"Hi! Your Pal is happy to help! 😊 You asked about '{query}'. While I can't access my document library right now, I'm still here to assist you with your studies! Feel free to ask me about any academic topic, and I'll do my best to help you learn and grow! 📚✨",
                 "source": "Pal AI Assistant (Fallback Mode)",
                 "timestamp": datetime.now().isoformat(),
                 "search_results": []
@@ -293,10 +408,77 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         
         # Generate answer based on valid search results
         if valid_search_results:
-            context = "\\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
-            answer = f"Here's what I found about '{query}': {context[:500]}..."
+            context = "\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
+            
+            # Use OpenAI GPT-4 to generate intelligent response
+            if OPENAI_AVAILABLE and openai_client:
+                try:
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+                        messages=[
+                            {"role": "system", "content": """You are Pal, the friendly AI educational assistant from HighPal! You're designed to be supportive, encouraging, and make learning fun for students preparing for competitive exams like JEE, NEET, CAT, UPSC, GATE, and other academic subjects.
+
+PERSONALITY & STYLE:
+- Always start with "Hi! Your Pal is happy to help! 😊" or similar warm greeting
+- Use encouraging language like "Great question!", "You're on the right track!", "Let's explore this together!"
+- End responses with supportive phrases like "Keep up the great work!", "You've got this!", or "Feel free to ask more questions!"
+- Use emojis appropriately to make responses friendly (📚, 💡, ✨, 🎯, etc.)
+- Break down complex concepts into simple, digestible steps
+- Provide real-world examples and applications
+- Always be positive and confidence-building
+
+RESPONSE FORMAT:
+1. Warm greeting acknowledging the question
+2. Clear, step-by-step explanation
+3. Example or practical application
+4. Encouraging closing statement
+
+When using provided context, weave it naturally into your explanation while maintaining your friendly Pal personality."""},
+                            {"role": "user", "content": f"Context from uploaded documents:\n{context}\n\nQuestion: {query}\n\nPlease provide a helpful, encouraging answer as Pal, using the context provided and maintaining your friendly, supportive personality."}
+                        ],
+                        max_completion_tokens=800,  # Increased for more detailed explanations
+                        temperature=0.7
+                    )
+                    answer = response.choices[0].message.content
+                except Exception as e:
+                    logger.error(f"OpenAI API error: {e}")
+                    answer = f"Hi! Your Pal is here! 😊 Based on the documents you've uploaded, here's what I found: {context[:300]}... (I'm having a small technical hiccup with my AI enhancement right now, but I'm still here to help! 🤖✨)"
+            else:
+                answer = f"Here's what I found about '{query}': {context[:500]}..."
         else:
-            answer = f"I don't have specific information about '{query}' in my knowledge base. Could you try rephrasing your question or asking about a different topic?"
+            # Use OpenAI GPT-4 for general educational assistance when no context is available
+            if OPENAI_AVAILABLE and openai_client:
+                try:
+                    response = openai_client.chat.completions.create(
+                        model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+                        messages=[
+                            {"role": "system", "content": """You are Pal, the friendly AI educational assistant from HighPal! You help students with competitive exams like JEE, NEET, CAT, UPSC, GATE, and all academic subjects.
+
+PERSONALITY & STYLE:
+- Always start with "Hi! Your Pal is happy to help! 😊" or similar warm greeting
+- Use encouraging phrases like "Great question!", "Let's learn this together!", "You're doing awesome!"
+- End with supportive statements like "Keep learning and growing!", "You've got this!", "Feel free to ask more!"
+- Use appropriate emojis (📚, 💡, ✨, 🎯, 🚀, etc.)
+- Be friendly, approachable, and confidence-building
+
+RESPONSE FORMAT:
+1. Warm greeting acknowledging the question
+2. Clear, step-by-step explanation with examples
+3. Real-world applications when relevant
+4. Encouraging closing statement
+
+Always maintain your helpful, supportive Pal personality while providing accurate educational content."""},
+                            {"role": "user", "content": query}
+                        ],
+                        max_completion_tokens=800,  # Increased for more comprehensive responses
+                        temperature=0.7
+                    )
+                    answer = response.choices[0].message.content
+                except Exception as e:
+                    logger.error(f"OpenAI API error: {e}")
+                    answer = f"Hi! Your Pal here! 😊 I don't have specific information about '{query}' in my current knowledge base, but I'm eager to help you learn! Could you try rephrasing your question or feel free to ask about any other topic? I'm here to support your learning journey! 📚✨"
+            else:
+                answer = f"Hi! Your Pal is here to help! 😊 I don't have specific information about '{query}' in my knowledge base right now, but don't worry! Could you try rephrasing your question or ask about a different topic? I'm always excited to help you learn something new! 🚀📖"
         
         # Don't show documents to users - they're only for training/context
         return {
@@ -668,6 +850,7 @@ if __name__ == "__main__":
     print("  • MongoDB Atlas cloud storage")
     print("  • Haystack document processing")  
     print("  • Semantic search with AI embeddings")
+    print(f"  • OpenAI GPT integration {'✅' if OPENAI_AVAILABLE else '❌'}")
     print("  • PDF URL training system")
     print("  • Background task processing")
     print("  • Batch training support")

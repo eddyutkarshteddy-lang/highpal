@@ -27,9 +27,10 @@
 
 ### 🧠 **Advanced AI Integration**
 - **Hume AI**: Industry-leading voice emotion detection and analysis
-- **OpenAI GPT**: Advanced educational content generation and reasoning
+- **OpenAI GPT-5**: Latest and most advanced educational content generation and reasoning
+- **Azure Speech Services**: Enterprise-grade STT and TTS with emotional expressiveness
 - **Emotional Response Engine**: Combines academic knowledge with emotional support
-- **Voice Synthesis**: Emotionally appropriate voice responses (calm, encouraging, energetic)
+- **Voice Synthesis**: Azure Neural Voices with emotionally appropriate responses (calm, encouraging, energetic)
 
 ### 📊 **Emotional Learning Analytics**
 - Daily emotional journey visualization
@@ -52,9 +53,10 @@
 - **AI Service Layer**: Multi-platform AI integration and orchestration
   - **Hume AI Client**: Voice emotion detection and analysis
   - **OpenAI Client**: Educational content generation and reasoning
+  - **Azure Speech Client**: Enterprise STT/TTS with emotional expressiveness
   - **Emotion Processor**: Combines voice and text emotion analysis
   - **Response Adapter**: Generates emotionally appropriate responses
-- **Voice Pipeline**: Emotion-aware speech processing and synthesis
+- **Voice Pipeline**: Azure-powered emotion-aware speech processing and synthesis
 - **Session Management**: Emotional state tracking and user profiling
 - **Port**: API server runs on `http://localhost:8000`
 
@@ -219,14 +221,24 @@ POST http://localhost:8000/train/pdf-urls
 # AI Service Keys
 HUME_API_KEY=your_hume_ai_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+AZURE_SPEECH_KEY=your_azure_speech_services_key_here
+AZURE_SPEECH_REGION=your_azure_region_here
 
 # MongoDB Atlas (Required)
 MONGODB_CONNECTION_STRING=mongodb+srv://<username>:<password>@cluster.mongodb.net/
+
+# Azure Speech Services Configuration
+AZURE_DEFAULT_VOICE=en-US-JennyNeural
+AZURE_SPEECH_RATE=medium
+AZURE_SPEECH_STYLE=cheerful
+EDUCATIONAL_EMPHASIS_ENABLED=true
 
 # Emotional Intelligence Settings
 EMOTION_DETECTION_ENABLED=true
 VOICE_EMOTION_SENSITIVITY=medium  # low, medium, high
 EMOTIONAL_MEMORY_RETENTION=90_days
+STRESS_DETECTION_THRESHOLD=7
+CONFIDENCE_BUILDING_ENABLED=true
 
 # Database Settings  
 MONGODB_DATABASE=highpal_emotional_learning

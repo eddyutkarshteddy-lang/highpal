@@ -1,25 +1,33 @@
 # 📡 HighPal API Documentation
 
-**Version:** 3.0.0  
-**Base URL:** `http://localhost:8003`  
-**Server:** FastAPI with dual-engine architecture and automatic OpenAPI docs at `/docs`
+**Version:** 4.0.0  
+**Base URL:** `http://localhost:8000`  
+**Server:** FastAPI with emotional intelligence and Azure Speech Services integration
 
 ---
 
 ## 🌐 API Overview
 
-HighPal provides a RESTful API for dual-mode educational assistance: open-ended exam preparation with "Learn with Pal" and document-focused learning with "My Book". The API supports emotionally intelligent conversations, memory management, and secure document processing.
+HighPal provides a RESTful API for emotionally intelligent educational assistance with enterprise-grade voice processing. The API supports dual learning modes, Azure Speech Services integration, real-time emotion detection, and adaptive learning responses.
 
 ### Architecture
-- **Orchestration Layer**: FastAPI routing between Pal Engine and Book Engine
-- **Pal Engine**: Handles exam preparation and open-ended learning conversations
-- **Book Engine**: Manages document-scoped Q&A and revision modes
-- **Memory Engine**: Multi-layered context management across sessions
+- **Orchestration Layer**: FastAPI routing with emotional intelligence processing
+- **Pal Engine**: Emotionally aware exam preparation and open conversations
+- **Book Engine**: Document-focused learning with emotional context
+- **Voice Engine**: Azure Speech Services for STT/TTS with emotional expressiveness
+- **Emotion Engine**: Hume AI integration for real-time emotion detection
+- **Memory Engine**: Emotional state tracking and personalized learning patterns
+
+### Voice Processing Pipeline
+- **Azure STT**: Convert student speech to text with high accuracy
+- **Hume AI**: Analyze voice emotions and stress patterns
+- **OpenAI**: Generate contextually and emotionally appropriate responses
+- **Azure TTS**: Deliver responses with emotionally expressive neural voices
 
 ### Authentication
 JWT token authentication for production. Local development supports demo mode.
-- **Guest Mode**: Limited functionality without memory persistence
-- **Authenticated Mode**: Full memory integration and personalization
+- **Guest Mode**: Limited functionality without emotional memory persistence
+- **Authenticated Mode**: Full emotional intelligence and personalization
 
 ### Content-Type
 - **Uploads:** `multipart/form-data`  
@@ -80,7 +88,182 @@ Get API overview and available endpoints.
 
 ---
 
-## 🎯 Learn with Pal Endpoints
+## � Voice & Emotional Intelligence Endpoints
+
+### `POST /voice/speech-to-text`
+Convert student speech to text using Azure Speech Services.
+
+**Request:**
+```json
+{
+  "audio_data": "base64_encoded_audio",
+  "user_id": "user123",
+  "context": {
+    "learning_mode": "pal",
+    "current_topic": "mathematics"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "transcription": {
+    "text": "I'm struggling with this calculus problem",
+    "confidence": 0.95,
+    "language": "en-US"
+  },
+  "processing_time": 245,
+  "audio_quality": "excellent"
+}
+```
+
+### `POST /voice/analyze-emotion`
+Analyze emotional state from voice using Hume AI.
+
+**Request:**
+```json
+{
+  "audio_data": "base64_encoded_audio",
+  "user_id": "user123",
+  "session_context": {
+    "previous_emotions": ["neutral", "confused"],
+    "learning_session_duration": 15
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "emotion_analysis": {
+    "primary_emotion": "frustration",
+    "emotion_scores": {
+      "frustration": 0.78,
+      "confusion": 0.65,
+      "determination": 0.43
+    },
+    "stress_level": 6.2,
+    "confidence_level": 3.1,
+    "intervention_needed": true
+  },
+  "recommendations": {
+    "voice_style": "calm",
+    "response_approach": "supportive",
+    "suggested_break": false
+  }
+}
+```
+
+### `POST /voice/text-to-speech`
+Generate emotionally appropriate speech using Azure Neural Voices.
+
+**Request:**
+```json
+{
+  "text": "I understand you're finding this challenging. Let's break it down step by step.",
+  "emotion_context": {
+    "student_emotion": "frustration",
+    "stress_level": 6.2,
+    "confidence_level": 3.1
+  },
+  "voice_preferences": {
+    "style": "supportive",
+    "rate": "medium",
+    "pitch": "medium"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "audio_data": "base64_encoded_audio",
+  "voice_config": {
+    "voice_name": "en-US-JennyNeural",
+    "style": "empathetic",
+    "rate": "slow",
+    "ssml_used": true
+  },
+  "emotional_adaptations": [
+    "calming_tone",
+    "encouraging_emphasis",
+    "supportive_pace"
+  ]
+}
+```
+
+### `POST /voice/conversation`
+Complete voice interaction pipeline with emotional intelligence.
+
+**Request:**
+```json
+{
+  "audio_input": "base64_encoded_audio",
+  "user_id": "user123",
+  "learning_context": {
+    "mode": "pal",
+    "subject": "physics",
+    "current_emotion": "confused",
+    "session_progress": 0.6
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "transcription": "I don't understand how momentum is conserved",
+  "emotion_analysis": {
+    "primary_emotion": "confusion",
+    "stress_level": 4.5,
+    "confidence_level": 4.0
+  },
+  "ai_response": {
+    "text": "Great question! Momentum conservation is one of the fundamental principles in physics. Let me explain it with a simple example...",
+    "emotional_tone": "encouraging",
+    "educational_level": "intermediate"
+  },
+  "audio_response": "base64_encoded_audio",
+  "learning_insights": {
+    "concept_difficulty": "medium",
+    "suggested_examples": ["billiard_balls", "car_collision"],
+    "follow_up_topics": ["kinetic_energy", "elastic_collisions"]
+  }
+}
+```
+
+### `GET /voice/emotional-history/{user_id}`
+Retrieve user's emotional learning journey and patterns.
+
+**Response:**
+```json
+{
+  "emotional_timeline": [
+    {
+      "timestamp": "2025-09-14T10:30:00Z",
+      "primary_emotion": "excitement",
+      "stress_level": 2.1,
+      "confidence_level": 7.8,
+      "learning_topic": "algebra"
+    }
+  ],
+  "patterns": {
+    "peak_learning_emotions": ["curiosity", "engagement"],
+    "stress_triggers": ["time_pressure", "complex_problems"],
+    "confidence_builders": ["step_by_step_explanations", "encouragement"]
+  },
+  "recommendations": {
+    "optimal_learning_time": "morning",
+    "preferred_voice_style": "cheerful",
+    "stress_intervention_threshold": 6.0
+  }
+}
+```
+
+---
+
+## �🎯 Learn with Pal Endpoints
 
 ### `POST /pal/conversation`
 Start or continue an open-ended educational conversation.

@@ -6,8 +6,10 @@ pydantic>=2.0.0
 python-dotenv>=1.0.0
 aiofiles>=23.0.0
 
-# OpenAI Integration - Primary AI Service
-openai>=1.30.0
+# AI Services Integration
+openai>=1.50.0  # Updated for GPT-5 support
+hume-ai>=0.2.0
+azure-cognitiveservices-speech>=1.30.0
 
 # Document Processing
 requests>=2.31.0

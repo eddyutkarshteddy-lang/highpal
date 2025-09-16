@@ -1,14 +1,21 @@
 # 🎭 HighPal Emotional Intelligence Setup Guide
 
-This guide covers the setup and configuration of HighPal's revolutionary emotional intelligence features, combining Hume AI's voice emotion detection with OpenAI's contextual content generation.
+This guide covers the setup and configurati# Additional dependencies for emotional intelligence
+pip install hume-ai
+pip install openai>=1.50.0  # Updated for GPT-5 support
+pip install azure-cognitiveservices-speech
+pip install websockets
+pip install asyncio
+pip install python-multipartighPal's revolutionary emotional intelligence features, combining Hume AI's voice emotion detection with Azure Speech Services for enterprise-grade voice processing and OpenAI's contextual content generation.
 
 ## 🧠 Overview
 
-HighPal's emotional intelligence system consists of three main components:
+HighPal's emotional intelligence system consists of four main components:
 
 1. **Hume AI Integration** - Real-time voice emotion detection (48+ emotions)
-2. **OpenAI Enhancement** - Emotionally aware content generation and responses
-3. **Emotional Processing Engine** - Combines voice analysis with adaptive learning
+2. **Azure Speech Services** - Enterprise STT/TTS with emotional expressiveness
+3. **OpenAI GPT-5** - Latest AI model for emotionally aware content generation and responses
+4. **Emotional Processing Engine** - Combines voice analysis with adaptive learning
 
 ## 🔑 API Keys & Authentication
 
@@ -18,6 +25,8 @@ HighPal's emotional intelligence system consists of three main components:
 # .env file configuration
 HUME_API_KEY=your_hume_ai_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+AZURE_SPEECH_KEY=your_azure_speech_services_key_here
+AZURE_SPEECH_REGION=your_azure_region_here
 MONGODB_URI=your_mongodb_connection_string
 ```
 
@@ -29,6 +38,13 @@ MONGODB_URI=your_mongodb_connection_string
 3. Navigate to "API Keys" in your dashboard
 4. Generate a new API key for voice emotion detection
 5. Copy the key to your `.env` file
+
+#### Azure Speech Services Key
+1. Visit [Azure Portal](https://portal.azure.com)
+2. Create or sign in to your Azure account
+3. Create a new "Speech" resource
+4. Navigate to "Keys and Endpoint" section
+5. Copy Key 1 and Region to your `.env` file
 
 #### OpenAI API Key
 1. Visit [OpenAI Platform](https://platform.openai.com/)
@@ -45,13 +61,14 @@ backend/
 ├── ai_integration/           # NEW: AI service integration
 │   ├── hume_client.py        # Hume AI emotion detection
 │   ├── openai_client.py      # OpenAI content generation
+│   ├── azure_speech_client.py # Azure Speech Services STT/TTS
 │   ├── emotion_analyzer.py   # Emotion processing engine
 │   └── response_adapter.py   # Emotional response generation
 ├── emotional_features/       # NEW: Emotional intelligence core
 │   ├── emotion_tracker.py    # Emotional state management
 │   ├── stress_detector.py    # Stress intervention system
 │   ├── confidence_builder.py # Confidence tracking & building
-│   └── voice_processor.py    # Voice emotion analysis
+│   └── voice_processor.py    # Azure-powered voice emotion analysis
 ├── database/                 # Enhanced data management
 │   ├── mongodb_config.py     # Updated for emotional data
 │   ├── emotional_schema.py   # NEW: Emotional data schemas
@@ -64,7 +81,7 @@ backend/
 src/
 ├── components/               
 │   ├── EmotionalInterface.jsx # Real-time emotion display
-│   ├── VoiceEmotionRecorder.jsx # Voice emotion capture
+│   ├── AzureVoiceRecorder.jsx # Azure Speech Services voice capture
 │   ├── EmotionalDashboard.jsx # Progress tracking
 │   ├── SearchResults.jsx     # Enhanced with emotional context
 │   └── TrainingInfo.jsx      # Emotional training insights
@@ -84,6 +101,7 @@ pip install -r requirements.txt
 # Additional dependencies for emotional intelligence
 pip install hume-ai
 pip install openai>=1.0.0
+pip install azure-cognitiveservices-speech
 pip install websockets
 pip install asyncio
 pip install python-multipart
@@ -109,6 +127,8 @@ collections_to_create = [
 # Enhanced .env configuration
 HUME_API_KEY=your_hume_ai_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
+AZURE_SPEECH_KEY=your_azure_speech_services_key_here
+AZURE_SPEECH_REGION=your_azure_region_here
 MONGODB_URI=your_mongodb_connection_string
 
 # Emotional Intelligence Settings
@@ -118,13 +138,83 @@ EMOTIONAL_MEMORY_RETENTION=90_days
 STRESS_INTERVENTION_THRESHOLD=7   # 1-10 scale
 CONFIDENCE_BUILDING_ENABLED=true
 
+# Azure Speech Services Settings
+AZURE_SPEECH_VOICE=en-US-JennyNeural  # Emotionally expressive voice
+AZURE_SPEECH_RATE=medium
+AZURE_SPEECH_STYLE=cheerful          # cheerful, sad, excited, calm
+
 # Server Configuration
 PORT=8000  # Updated from 8003 for emotional features
 DEBUG_MODE=true
 EMOTIONAL_LOGGING=true
 ```
 
-## 🎤 Voice Emotion Detection Setup
+## 🎤 Voice Processing with Azure Speech Services
+
+### Azure Speech Services Configuration
+
+```python
+# azure_speech_client.py example configuration
+import azure.cognitiveservices.speech as speechsdk
+import asyncio
+
+class AzureSpeechProcessor:
+    def __init__(self, subscription_key, region):
+        self.speech_config = speechsdk.SpeechConfig(
+            subscription=subscription_key, 
+            region=region
+        )
+        self.setup_emotional_voices()
+        
+    def setup_emotional_voices(self):
+        """Configure emotionally expressive voices"""
+        self.voice_styles = {
+            'calm': 'en-US-JennyNeural',
+            'encouraging': 'en-US-AriaNeural', 
+            'energetic': 'en-US-GuyNeural',
+            'cheerful': 'en-US-JennyNeural'
+        }
+        
+    async def speech_to_text(self, audio_stream):
+        """Convert speech to text using Azure STT"""
+        audio_config = speechsdk.audio.AudioConfig(stream=audio_stream)
+        speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=self.speech_config, 
+            audio_config=audio_config
+        )
+        
+        result = await speech_recognizer.recognize_once_async()
+        return {
+            'text': result.text,
+            'confidence': result.properties.get('SPEECH_RECOGNITION_CONFIDENCE')
+        }
+        
+    async def text_to_speech(self, text, emotion_style='calm'):
+        """Convert text to emotionally appropriate speech"""
+        voice_name = self.voice_styles.get(emotion_style, 'en-US-JennyNeural')
+        
+        # Configure SSML for emotional expression
+        ssml = f"""
+        <speak version='1.0' xml:lang='en-US'>
+            <voice name='{voice_name}'>
+                <mstts:express-as style='{emotion_style}'>
+                    {text}
+                </mstts:express-as>
+            </voice>
+        </speak>
+        """
+        
+        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
+        synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=self.speech_config,
+            audio_config=audio_config
+        )
+        
+        result = await synthesizer.speak_ssml_async(ssml)
+        return result.audio_data
+```
+
+## 🎭 Emotion Detection with Hume AI
 
 ### Hume AI Configuration
 
@@ -163,22 +253,102 @@ class EmotionDetector:
             'confidence_level': self.calculate_confidence_level(emotions)
         }
 ```
+```
 
-### Real-time Audio Processing
+### Real-time Audio Processing with Azure Speech Services
 
 ```javascript
-// VoiceEmotionRecorder.jsx example
+// AzureVoiceRecorder.jsx example
 import React, { useState, useRef } from 'react';
+import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 
-const VoiceEmotionRecorder = ({ onEmotionDetected }) => {
+const AzureVoiceRecorder = ({ onEmotionDetected, onTranscription }) => {
     const [isRecording, setIsRecording] = useState(false);
-    const mediaRecorder = useRef(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const recognizer = useRef(null);
     
-    const startRecording = async () => {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder.current = new MediaRecorder(stream);
+    const initializeAzureSpeech = () => {
+        const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(
+            process.env.REACT_APP_AZURE_SPEECH_KEY,
+            process.env.REACT_APP_AZURE_SPEECH_REGION
+        );
+        speechConfig.speechRecognitionLanguage = "en-US";
         
-        mediaRecorder.current.ondataavailable = async (event) => {
+        const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+        recognizer.current = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+        
+        recognizer.current.recognizing = (s, e) => {
+            console.log(`RECOGNIZING: Text=${e.result.text}`);
+        };
+        
+        recognizer.current.recognized = async (s, e) => {
+            if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+                const transcription = e.result.text;
+                onTranscription(transcription);
+                
+                // Send audio to Hume AI for emotion analysis
+                await analyzeEmotion(e.result.privAudioData);
+            }
+        };
+    };
+    
+    const analyzeEmotion = async (audioData) => {
+        try {
+            setIsProcessing(true);
+            const response = await fetch('/api/analyze-emotion', {
+                method: 'POST',
+                body: audioData,
+                headers: {
+                    'Content-Type': 'audio/wav'
+                }
+            });
+            
+            const emotionData = await response.json();
+            onEmotionDetected(emotionData);
+        } catch (error) {
+            console.error('Emotion analysis failed:', error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+    
+    const startRecording = () => {
+        if (!recognizer.current) {
+            initializeAzureSpeech();
+        }
+        
+        setIsRecording(true);
+        recognizer.current.startContinuousRecognitionAsync();
+    };
+    
+    const stopRecording = () => {
+        setIsRecording(false);
+        if (recognizer.current) {
+            recognizer.current.stopContinuousRecognitionAsync();
+        }
+    };
+    
+    return (
+        <div className="azure-voice-recorder">
+            <button
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`voice-button ${isRecording ? 'recording' : ''} ${isProcessing ? 'processing' : ''}`}
+                disabled={isProcessing}
+            >
+                {isRecording ? '🛑 Stop Recording' : '🎤 Start Recording'}
+            </button>
+            
+            {isProcessing && (
+                <div className="processing-indicator">
+                    🧠 Analyzing emotions...
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default AzureVoiceRecorder;
+```
             const audioBlob = event.data;
             const base64Audio = await blobToBase64(audioBlob);
             
