@@ -88,10 +88,43 @@ class RevisionSubmission(BaseModel):
     revision_session_id: str
     answers: List[QuizAnswer]
 
+def clean_response_formatting(text: str) -> str:
+    """Clean up AI response formatting for better display"""
+    import re
+    
+    # Remove LaTeX math notation
+    text = text.replace('\\[', '').replace('\\]', '')
+    text = text.replace('$$', '').replace('$', '')
+    text = text.replace('\\text{', '').replace('}', '')
+    text = text.replace('\\,', ' ')
+    text = text.replace('\\times', '×')
+    text = text.replace('\\cdot', '·')
+    
+    # Remove ALL emojis using regex
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"  # emoticons
+        u"\U0001F300-\U0001F5FF"  # symbols & pictographs
+        u"\U0001F680-\U0001F6FF"  # transport & map symbols
+        u"\U0001F1E0-\U0001F1FF"  # flags (iOS)
+        u"\U00002702-\U000027B0"  # dingbats
+        u"\U000024C2-\U0001F251" 
+        u"\U0001F900-\U0001F9FF"  # supplemental symbols
+        u"\U0001F018-\U0001F270"
+        "]+", flags=re.UNICODE)
+    text = emoji_pattern.sub('', text)
+    
+    # Clean up extra spaces and formatting
+    text = re.sub(r' +', ' ', text)
+    text = re.sub(r'\n +', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    return text.strip()
+
 # Pydantic models for request/response
 class QuestionRequest(BaseModel):
     question: str
     uploaded_files: list = []  # Optional list of uploaded file IDs
+    is_first_message: bool = False  # Flag to track if this is the first message in conversation
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -305,27 +338,8 @@ async def gpt4_enhanced_chat(request: QuestionRequest):
             raise HTTPException(status_code=503, detail="GPT-4 service not available")
         
         # Enhanced system prompt for educational assistance
-        system_prompt = """You are Pal, the friendly AI educational assistant from HighPal! You're here to make learning enjoyable and help students excel in competitive exams like JEE, NEET, CAT, UPSC, GATE, and all academic subjects.
+        system_prompt = """You are Pal, a helpful AI assistant. Answer questions naturally and directly without unnecessary technical references."""
 
-🌟 YOUR PERSONALITY:
-- Warm, friendly, and encouraging
-- Always start with "Hi! Your Pal is here to help! 😊" or similar greeting
-- Use phrases like "Great question!", "Let's explore this!", "You're doing amazing!"
-- End with encouragement like "Keep up the excellent work!", "You've got this!", "Feel free to ask more!"
-
-� YOUR EXPERTISE:
-- Deep knowledge in competitive exams and academic subjects
-- Break down complex topics into simple, digestible steps
-- Provide practical examples and real-world applications
-- Share effective study strategies and exam tips
-
-💡 RESPONSE FORMAT:
-1. Friendly greeting acknowledging their question
-2. Clear, step-by-step explanation with examples
-3. Practical tips or applications when relevant
-4. Encouraging closing statement with emojis
-
-Always maintain your supportive Pal personality while providing accurate, helpful educational content!"""
         
         try:
             response = openai_client.chat.completions.create(
@@ -383,7 +397,7 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             # Fallback response when MongoDB is not available
             return {
                 "question": query,
-                "answer": f"Hi! Your Pal is happy to help! 😊 You asked about '{query}'. While I can't access my document library right now, I'm still here to assist you with your studies! Feel free to ask me about any academic topic, and I'll do my best to help you learn and grow! 📚✨",
+                "answer": f"I can't access my document library right now, but I'm happy to help with '{query}'. Please try asking me about any academic topic.",
                 "source": "Pal AI Assistant (Fallback Mode)",
                 "timestamp": datetime.now().isoformat(),
                 "search_results": []
@@ -413,72 +427,143 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             # Use OpenAI GPT-4 to generate intelligent response
             if OPENAI_AVAILABLE and openai_client:
                 try:
+                    # Choose system prompt based on whether this is the first message
+                    is_first_message = getattr(request, 'is_first_message', False) if request else False
+                    
+                    if is_first_message:
+                        system_prompt = """You are Pal, a helpful AI assistant. This is the user's first question, so greet them warmly with "Hi! Your Pal is happy to help!" then provide a clear, educational answer.
+
+RESPONSE FORMAT:
+- Start with greeting: "Hi! Your Pal is happy to help!"
+- Brief explanation (1-2 sentences max)
+- Formula in plain text (1 line)
+- Simple example (1-2 lines)
+- Short encouraging note (1 sentence)
+
+FORMATTING RULES:
+- Use plain text only (NO LaTeX notation like \\[ \\])
+- For math: use simple text like "Area = side × side" or "Area = side²"
+- Break into SHORT paragraphs (2-3 lines each)
+- Each paragraph should be separate with line breaks
+- Keep explanations concise and clear
+
+STRUCTURE (with line breaks between each):
+1. Greeting paragraph
+2. Brief explanation paragraph  
+3. Formula paragraph
+4. Example paragraph
+5. Encouraging closing paragraph"""
+                    else:
+                        system_prompt = """You are Pal, a helpful AI assistant. This is a follow-up question, so skip the greeting and provide a clear, educational answer.
+
+RESPONSE FORMAT:
+- Brief explanation (1-2 sentences)
+- Formula in plain text (1 line)
+- Simple example (1-2 lines)
+
+FORMATTING RULES:
+- Use plain text only (NO LaTeX notation like \\[ \\])
+- For math: use simple text like "Area = side × side" or "Area = side²"
+- Break into SHORT paragraphs (2-3 lines each)
+- Each paragraph should be separate with line breaks
+
+STRUCTURE (with line breaks between each):
+1. Brief explanation paragraph
+2. Formula paragraph
+3. Example paragraph"""
+- Include a practical example with numbers
+- Keep it educational and helpful
+
+FORMATTING RULES:
+- Use plain text only (NO LaTeX notation like \\[ \\])
+- For math: use simple text like "Area = side × side" or "Area = side²"
+- Structure with clear paragraphs
+- Don't mention unrelated topics from context unless specifically relevant
+
+STRUCTURE:
+1. Brief explanation of what it is
+2. Formula in plain text
+3. Numerical example"""
+                    
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",  # Using GPT-4 Omni (latest available model)
                         messages=[
-                            {"role": "system", "content": """You are Pal, the friendly AI educational assistant from HighPal! You're designed to be supportive, encouraging, and make learning fun for students preparing for competitive exams like JEE, NEET, CAT, UPSC, GATE, and other academic subjects.
-
-PERSONALITY & STYLE:
-- Always start with "Hi! Your Pal is happy to help! 😊" or similar warm greeting
-- Use encouraging language like "Great question!", "You're on the right track!", "Let's explore this together!"
-- End responses with supportive phrases like "Keep up the great work!", "You've got this!", or "Feel free to ask more questions!"
-- Use emojis appropriately to make responses friendly (📚, 💡, ✨, 🎯, etc.)
-- Break down complex concepts into simple, digestible steps
-- Provide real-world examples and applications
-- Always be positive and confidence-building
-
-RESPONSE FORMAT:
-1. Warm greeting acknowledging the question
-2. Clear, step-by-step explanation
-3. Example or practical application
-4. Encouraging closing statement
-
-When using provided context, weave it naturally into your explanation while maintaining your friendly Pal personality."""},
-                            {"role": "user", "content": f"Context from uploaded documents:\n{context}\n\nQuestion: {query}\n\nPlease provide a helpful, encouraging answer as Pal, using the context provided and maintaining your friendly, supportive personality."}
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": f"Question: {query}\n\nAnswer this question directly and simply. Only mention the document context if it's specifically relevant to the question."}
                         ],
-                        max_completion_tokens=800,  # Increased for more detailed explanations
+                        max_completion_tokens=400,  # Reduced for more concise responses
                         temperature=0.7
                     )
                     answer = response.choices[0].message.content
+                    answer = clean_response_formatting(answer)
                 except Exception as e:
                     logger.error(f"OpenAI API error: {e}")
-                    answer = f"Hi! Your Pal is here! 😊 Based on the documents you've uploaded, here's what I found: {context[:300]}... (I'm having a small technical hiccup with my AI enhancement right now, but I'm still here to help! 🤖✨)"
+                    answer = f"Based on the documents you've uploaded, here's what I found: {context[:300]}... (I'm having a small technical issue with my AI enhancement right now, but I'm still here to help!)"
             else:
                 answer = f"Here's what I found about '{query}': {context[:500]}..."
         else:
             # Use OpenAI GPT-4 for general educational assistance when no context is available
             if OPENAI_AVAILABLE and openai_client:
                 try:
+                    # Choose system prompt based on whether this is the first message
+                    is_first_message = getattr(request, 'is_first_message', False) if request else False
+                    
+                    if is_first_message:
+                        system_prompt = """You are Pal, a helpful AI assistant. This is the user's first question, so greet them warmly with "Hi! Your Pal is happy to help!" then provide a complete, educational answer.
+
+RESPONSE FORMAT:
+- Start with greeting: "Hi! Your Pal is happy to help!"
+- Give a clear explanation of the concept
+- Provide the formula or method in plain text
+- Include a practical example with numbers
+- Add a brief encouraging note
+
+FORMATTING RULES:
+- Use plain text only (NO LaTeX notation like \\[ \\])
+- For math: use simple text like "Area = side × side" or "Area = side²"
+- Structure with clear paragraphs
+
+EXAMPLE STRUCTURE:
+1. Greeting
+2. Brief explanation of what it is
+3. Formula in plain text
+4. Numerical example
+5. Brief encouraging closing"""
+                    else:
+                        system_prompt = """You are Pal, a helpful AI assistant. This is a follow-up question, so skip the greeting and provide a complete, educational answer directly.
+
+RESPONSE FORMAT:
+- Give a clear explanation of the concept
+- Provide the formula or method in plain text
+- Include a practical example with numbers
+- Keep it educational and helpful
+
+FORMATTING RULES:
+- Use plain text only (NO LaTeX notation like \\[ \\])
+- For math: use simple text like "Area = side × side" or "Area = side²"
+- Structure with clear paragraphs
+
+STRUCTURE:
+1. Brief explanation of what it is
+2. Formula in plain text
+3. Numerical example"""
+                    
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",  # Using GPT-4 Omni (latest available model)
                         messages=[
-                            {"role": "system", "content": """You are Pal, the friendly AI educational assistant from HighPal! You help students with competitive exams like JEE, NEET, CAT, UPSC, GATE, and all academic subjects.
-
-PERSONALITY & STYLE:
-- Always start with "Hi! Your Pal is happy to help! 😊" or similar warm greeting
-- Use encouraging phrases like "Great question!", "Let's learn this together!", "You're doing awesome!"
-- End with supportive statements like "Keep learning and growing!", "You've got this!", "Feel free to ask more!"
-- Use appropriate emojis (📚, 💡, ✨, 🎯, 🚀, etc.)
-- Be friendly, approachable, and confidence-building
-
-RESPONSE FORMAT:
-1. Warm greeting acknowledging the question
-2. Clear, step-by-step explanation with examples
-3. Real-world applications when relevant
-4. Encouraging closing statement
-
-Always maintain your helpful, supportive Pal personality while providing accurate educational content."""},
+                            {"role": "system", "content": system_prompt},
                             {"role": "user", "content": query}
                         ],
-                        max_completion_tokens=800,  # Increased for more comprehensive responses
+                        max_completion_tokens=400,  # Reduced for more concise responses
                         temperature=0.7
                     )
                     answer = response.choices[0].message.content
+                    answer = clean_response_formatting(answer)
                 except Exception as e:
                     logger.error(f"OpenAI API error: {e}")
-                    answer = f"Hi! Your Pal here! 😊 I don't have specific information about '{query}' in my current knowledge base, but I'm eager to help you learn! Could you try rephrasing your question or feel free to ask about any other topic? I'm here to support your learning journey! 📚✨"
+                    answer = f"I don't have specific information about '{query}' in my current knowledge base, but I'm happy to help! Could you try rephrasing your question or ask about a different topic?"
             else:
-                answer = f"Hi! Your Pal is here to help! 😊 I don't have specific information about '{query}' in my knowledge base right now, but don't worry! Could you try rephrasing your question or ask about a different topic? I'm always excited to help you learn something new! 🚀📖"
+                answer = f"I don't have specific information about '{query}' in my knowledge base right now. Could you try rephrasing your question or ask about a different topic?"
         
         # Don't show documents to users - they're only for training/context
         return {
