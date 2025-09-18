@@ -36,13 +36,6 @@ function App() {
   const [audioChunks, setAudioChunks] = useState([]);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [currentAudio, setCurrentAudio] = useState(null);
-  
-  // Continuous conversation state
-  const [isConversationActive, setIsConversationActive] = useState(false);
-  const [conversationTimeout, setConversationTimeout] = useState(null);
-  const [turnCount, setTurnCount] = useState(0);
-  const continuousRecognitionRef = useRef(null);
-  const conversationActiveRef = useRef(false);
 
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
@@ -76,318 +69,6 @@ function App() {
     loadExistingDocuments();
   }, []);
 
-  // Azure Speech Service configuration from environment variables
-  const azureSpeechConfig = {
-    subscriptionKey: import.meta.env.VITE_AZURE_SPEECH_KEY,
-    region: import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia",
-    voiceName: import.meta.env.VITE_AZURE_SPEECH_VOICE || "en-US-EmmaMultilingualNeural",
-    endpoint: `https://${import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia"}.tts.speech.microsoft.com/`
-  };
-
-  // Continuous conversation helper functions
-  const isEndCommand = (text) => {
-    const endPhrases = [
-      'bye', 'goodbye', 'exit', 'quit', 'stop', 'end conversation', 
-      'that\'s all', 'thank you', 'thanks', 'end', 'finish'
-    ];
-    return endPhrases.some(phrase => text.toLowerCase().includes(phrase));
-  };
-
-  const startContinuousListening = () => {
-    return new Promise((resolve, reject) => {
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        reject(new Error('Speech recognition not supported'));
-        return;
-      }
-
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
-      
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'en-US';
-      recognition.maxAlternatives = 1;
-
-      let timeout = setTimeout(() => {
-        recognition.stop();
-        reject(new Error('Speech timeout'));
-      }, 30000); // 30 second timeout
-
-      recognition.onresult = (event) => {
-        clearTimeout(timeout);
-        const transcript = event.results[0][0].transcript.trim();
-        console.log('Recognized speech:', transcript);
-        resolve(transcript);
-      };
-
-      recognition.onerror = (event) => {
-        clearTimeout(timeout);
-        console.error('Speech recognition error:', event.error);
-        reject(new Error(`Speech recognition error: ${event.error}`));
-      };
-
-      recognition.onend = () => {
-        clearTimeout(timeout);
-      };
-
-      continuousRecognitionRef.current = recognition;
-      recognition.start();
-    });
-  };
-
-  const endConversation = () => {
-    console.log('Ending conversation');
-    setIsConversationActive(false);
-    conversationActiveRef.current = false;
-    setVoiceState('idle');
-    setTurnCount(0);
-    
-    // Stop any ongoing recognition
-    if (continuousRecognitionRef.current) {
-      continuousRecognitionRef.current.stop();
-      continuousRecognitionRef.current = null;
-    }
-    
-    // Clear any timeouts
-    if (conversationTimeout) {
-      clearTimeout(conversationTimeout);
-      setConversationTimeout(null);
-    }
-  };
-
-  // Play AI response using browser speech synthesis (fallback) or Azure Speech Service
-  const playAIResponse = async (text) => {
-    try {
-      console.log('Playing AI response:', text);
-      
-      // Try Azure Speech Service first
-      try {
-        const response = await fetch(`${azureSpeechConfig.endpoint}cognitiveservices/v1`, {
-          method: 'POST',
-          headers: {
-            'Ocp-Apim-Subscription-Key': azureSpeechConfig.subscriptionKey,
-            'Content-Type': 'application/ssml+xml',
-            'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3'
-          },
-          body: `
-            <speak version='1.0' xml:lang='en-US'>
-              <voice xml:lang='en-US' xml:gender='Female' name='${azureSpeechConfig.voiceName}'>
-                <prosody rate='0.9' pitch='medium'>
-                  ${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-                </prosody>
-              </voice>
-            </speak>
-          `
-        });
-
-        if (response.ok) {
-          const audioBlob = await response.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          
-          return new Promise((resolve, reject) => {
-            const audio = new Audio(audioUrl);
-            audio.onloadeddata = () => {
-              console.log('Audio loaded, playing...');
-              audio.play().then(() => {
-                setCurrentAudio(audio);
-              }).catch(reject);
-            };
-            audio.onended = () => {
-              console.log('Audio playback finished');
-              URL.revokeObjectURL(audioUrl);
-              setCurrentAudio(null);
-              resolve();
-            };
-            audio.onerror = (error) => {
-              console.error('Audio playback error:', error);
-              URL.revokeObjectURL(audioUrl);
-              reject(error);
-            };
-          });
-        } else {
-          throw new Error(`Azure Speech Service error: ${response.status}`);
-        }
-      } catch (azureError) {
-        console.warn('Azure Speech failed, using browser fallback:', azureError.message);
-        
-        // Fallback to browser speech synthesis
-        return new Promise((resolve, reject) => {
-          if ('speechSynthesis' in window) {
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 1;
-            utterance.volume = 1;
-            
-            // Try to use a female voice
-            const voices = speechSynthesis.getVoices();
-            const femaleVoice = voices.find(voice => 
-              voice.name.toLowerCase().includes('female') || 
-              voice.name.toLowerCase().includes('zira') ||
-              voice.name.toLowerCase().includes('hazel') ||
-              voice.gender === 'female'
-            );
-            if (femaleVoice) {
-              utterance.voice = femaleVoice;
-            }
-            
-            utterance.onend = () => {
-              console.log('Browser speech finished');
-              resolve();
-            };
-            utterance.onerror = (error) => {
-              console.error('Browser speech error:', error);
-              reject(error);
-            };
-            
-            speechSynthesis.speak(utterance);
-          } else {
-            reject(new Error('Speech synthesis not supported'));
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error playing AI response:', error);
-      throw error;
-    }
-  };
-
-  // Main voice conversation handler for continuous mode
-  const handleVoiceConversation = async () => {
-    console.log('Voice button clicked, current state:', voiceState, 'Active:', isConversationActive);
-    
-    if (isConversationActive) {
-      // End the conversation
-      await playAIResponse("Ending our conversation. Goodbye!");
-      endConversation();
-      return;
-    }
-
-    // Check microphone permissions
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
-    } catch (error) {
-      console.error('Microphone access denied:', error);
-      alert('Microphone access is required for voice conversation. Please:\n\n1. Click the microphone icon 🎤 in your browser address bar\n2. Select "Allow"\n3. Refresh the page and try again\n\nOr check your browser microphone settings.');
-      return;
-    }
-
-    // Start continuous conversation
-    await startContinuousConversation();
-  };
-
-  const startContinuousConversation = async () => {
-    console.log('Starting continuous conversation');
-    setIsConversationActive(true);
-    conversationActiveRef.current = true;
-    setTurnCount(0);
-    
-    // Welcome message
-    setVoiceState('speaking');
-    const welcomeMessage = "Hi! I'm Pal, your AI tutor. I'm ready for our conversation - what would you like to learn about today?";
-    await playAIResponse(welcomeMessage);
-    
-    // Small delay to ensure state is updated, then start the conversation loop
-    setTimeout(() => {
-      conversationLoop();
-    }, 500);
-  };
-
-  const conversationLoop = async () => {
-    console.log('ConversationLoop started, conversationActiveRef:', conversationActiveRef.current);
-    
-    while (conversationActiveRef.current) {
-      try {
-        console.log('Starting new turn in conversation loop');
-        
-        // Double check if conversation was ended
-        if (!conversationActiveRef.current) {
-          console.log('Conversation was ended, breaking loop');
-          break;
-        }
-        
-        setVoiceState('listening');
-        console.log('Voice state set to listening, about to start listening...');
-        
-        // Listen for user input
-        const userInput = await startContinuousListening();
-        console.log('User said:', userInput);
-        
-        // Check if user wants to end conversation
-        if (isEndCommand(userInput)) {
-          await playAIResponse("Goodbye! Thanks for our conversation. Feel free to chat with me anytime!");
-          endConversation();
-          return;
-        }
-        
-        // Process the question
-        setVoiceState('processing');
-        const aiResponse = await getAIResponse(userInput);
-        
-        // Add follow-up prompt to continue conversation
-        const responseWithPrompt = `${aiResponse}\n\nDo you have any other questions?`;
-        
-        // Speak the response
-        setVoiceState('speaking');
-        await playAIResponse(responseWithPrompt);
-        
-        // Increment turn count
-        setTurnCount(prev => prev + 1);
-        
-        // Brief pause before next listen
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-      } catch (error) {
-        console.log('Conversation error:', error.message);
-        
-        if (error.message === 'Speech timeout') {
-          // Handle timeout gracefully
-          setVoiceState('speaking');
-          await playAIResponse("I didn't hear anything. Do you have another question, or should we end our conversation?");
-          // Continue the loop to give another chance
-        } else {
-          // Other errors - end conversation
-          console.error('Ending conversation due to error:', error);
-          endConversation();
-          break;
-        }
-      }
-    }
-    console.log('ConversationLoop ended');
-  };
-
-  const getAIResponse = async (question) => {
-    try {
-      console.log('Sending to AI:', question);
-      const response = await fetch('http://localhost:8003/ask_question/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          question: question,
-          uploaded_files: [],
-          is_first_message: conversationHistoryPal.length === 0
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      const aiResponse = data.answer || 'I apologize, but I couldn\'t process that question properly.';
-      
-      // Update conversation history
-      const newEntry = { question: question, answer: aiResponse };
-      setConversationHistoryPal(prev => [...prev, newEntry]);
-      
-      return aiResponse;
-      
-    } catch (error) {
-      console.error('AI response error:', error);
-      return 'I\'m having trouble processing that right now. Could you try asking in a different way?';
-    }
-  };
-
   // Mic functionality
   const handleMicClick = () => {
     if (!listening) {
@@ -414,11 +95,211 @@ function App() {
     }
   };
 
+  // Voice Conversation Handler (like Sesame)
+  const handleVoiceConversation = async () => {
+    console.log('Voice button clicked, current state:', voiceState);
+    
+    if (voiceState === 'idle') {
+      try {
+        // Check if browser supports speech recognition
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+          alert('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+          return;
+        }
+        
+        // Request microphone permission explicitly
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('Microphone permission granted');
+        } catch (permissionError) {
+          console.error('Microphone permission denied:', permissionError);
+          alert('Microphone access is required for voice conversation. Please:\n\n1. Click the microphone icon 🎤 in your browser address bar\n2. Select "Allow"\n3. Refresh the page and try again\n\nOr check your browser microphone settings.');
+          return;
+        }
+        
+        setVoiceState('listening');
+        console.log('Starting speech recognition...');
+        
+        // Step 1: Listen for voice input
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.continuous = false;
+        
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          console.log('Speech recognition timeout - stopping');
+          recognition.stop();
+          setVoiceState('idle');
+        }, 10000); // 10 second timeout
+        
+        recognition.onstart = () => {
+          console.log('Speech recognition started - say something now!');
+        };
+        
+        recognition.onspeechstart = () => {
+          console.log('Speech detected!');
+        };
+        
+        recognition.onspeechend = () => {
+          console.log('Speech ended');
+        };
+        
+        recognition.onnomatch = () => {
+          console.log('No speech was recognized');
+          setVoiceState('idle');
+        };
+        
+        recognition.onresult = async (event) => {
+          clearTimeout(timeoutId); // Clear timeout when we get results
+          console.log('Recognition result event:', event);
+          console.log('Results length:', event.results.length);
+          
+          if (event.results.length > 0) {
+            const transcript = event.results[0][0].transcript;
+            const confidence = event.results[0][0].confidence;
+            console.log('Voice input received:', transcript);
+            console.log('Confidence:', confidence);
+            
+            if (transcript.trim().length === 0) {
+              console.log('Empty transcript received');
+              setVoiceState('idle');
+              return;
+            }
+            
+            setVoiceState('processing');
+            
+            // Step 2: Send to AI and get response
+            try {
+              console.log('Sending to AI:', transcript);
+              const response = await fetch('http://localhost:8003/ask_question/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  question: transcript,
+                  uploaded_files: [],
+                  is_first_message: conversationHistoryPal.length === 0
+                })
+              });
+              
+              console.log('AI response status:', response.status);
+              const data = await response.json();
+              console.log('AI response data:', data);
+              const aiResponse = data.answer || data.response || 'Sorry, I couldn\'t process that.';
+              
+              // Update conversation history
+              const newEntry = { question: transcript, answer: aiResponse };
+              setConversationHistoryPal(prev => [...prev, newEntry]);
+              
+              // Step 3: Convert AI response to speech
+              console.log('Converting to speech:', aiResponse);
+              setVoiceState('speaking');
+              await playAIResponse(aiResponse);
+              
+              // Step 4: Ready for next conversation
+              setVoiceState('idle');
+              console.log('Voice conversation completed');
+              
+            } catch (error) {
+              console.error('Error processing voice conversation:', error);
+              alert('Error processing your request: ' + error.message);
+              setVoiceState('idle');
+            }
+          }
+        };
+        
+        recognition.onerror = (event) => {
+          clearTimeout(timeoutId); // Clear timeout on error
+          console.error('Speech recognition error:', event.error);
+          alert('Speech recognition error: ' + event.error);
+          setVoiceState('idle');
+        };
+        
+        recognition.onend = () => {
+          clearTimeout(timeoutId); // Clear timeout when speech ends
+          console.log('Speech recognition ended');
+          if (voiceState === 'listening') {
+            setVoiceState('idle');
+          }
+        };
+        
+        recognitionRef.current = recognition;
+        recognition.start();
+        
+      } catch (error) {
+        console.error('Error starting voice conversation:', error);
+        alert('Error starting voice conversation: ' + error.message);
+        setVoiceState('idle');
+      }
+    } else if (voiceState === 'listening') {
+      // Stop listening if currently listening
+      console.log('Stopping speech recognition');
+      recognitionRef.current && recognitionRef.current.stop();
+      setVoiceState('idle');
+    }
+  };
+
+  // Play AI response as speech
+  const playAIResponse = async (text) => {
+    try {
+      console.log('Requesting text-to-speech for:', text.substring(0, 50) + '...');
+      const response = await fetch('http://localhost:8003/api/text-to-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      });
+      
+      console.log('Text-to-speech response status:', response.status);
+      
+      if (response.ok) {
+        const audioBlob = await response.blob();
+        console.log('Audio blob size:', audioBlob.size);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        return new Promise((resolve) => {
+          audio.onended = () => {
+            console.log('Audio playback completed');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+          audio.onerror = (e) => {
+            console.error('Error playing audio:', e);
+            alert('Error playing audio response');
+            resolve();
+          };
+          audio.onloadstart = () => {
+            console.log('Audio loading started');
+          };
+          audio.oncanplay = () => {
+            console.log('Audio can play');
+          };
+          console.log('Starting audio playback');
+          audio.play().catch(e => {
+            console.error('Error starting audio playback:', e);
+            alert('Error playing audio: ' + e.message);
+            resolve();
+          });
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Text-to-speech error:', response.status, errorText);
+        alert('Error getting speech audio: ' + response.status);
+      }
+    } catch (error) {
+      console.error('Error playing AI response:', error);
+      alert('Error playing AI response: ' + error.message);
+    }
+  };
+
   // Connect to backend server for Pal mode
   const handleAskPal = async () => {
     if (!questionPal.trim()) return;
     
     const questionText = questionPal.trim();
+    const isFirstMessage = conversationHistoryPal.length === 0;
     
     const newEntry = {
       id: Date.now(),
@@ -433,7 +314,8 @@ function App() {
     try {
       const requestBody = {
         question: questionText,
-        uploaded_files: []
+        uploaded_files: [],
+        is_first_message: isFirstMessage
       };
 
       const response = await fetch('http://localhost:8003/ask_question/', {
@@ -485,6 +367,7 @@ function App() {
     if (!questionBook.trim()) return;
     
     const questionText = questionBook.trim();
+    const isFirstMessage = conversationHistoryBook.length === 0;
     
     const newEntry = {
       id: Date.now(),
@@ -499,7 +382,8 @@ function App() {
     try {
       const requestBody = {
         question: questionText,
-        uploaded_files: uploadedFiles.map(f => f.id)
+        uploaded_files: uploadedFiles.map(f => f.id),
+        is_first_message: isFirstMessage
       };
 
       const response = await fetch('http://localhost:8003/ask_question/', {
@@ -842,9 +726,8 @@ function App() {
               disabled={chatMode === 'book' && uploadedFiles.length === 0}
               style={{
                 padding: '12px',
-                background: isConversationActive && voiceState === 'idle' ? '#dc3545' :
-                           voiceState === 'idle' ? '#28a745' : 
-                           voiceState === 'listening' ? '#28a745' : 
+                background: voiceState === 'idle' ? '#28a745' : 
+                           voiceState === 'listening' ? '#dc3545' : 
                            voiceState === 'processing' ? '#ffc107' : '#17a2b8',
                 color: 'white',
                 border: 'none',
@@ -859,20 +742,29 @@ function App() {
                 transition: 'all 0.3s ease'
               }}
               title={
-                isConversationActive ? 'End voice conversation' :
-                voiceState === 'idle' ? 'Start continuous voice conversation' :
-                voiceState === 'listening' ? 'Listening... (conversation active)' :
+                voiceState === 'idle' ? 'Start voice conversation' :
+                voiceState === 'listening' ? 'Listening... (click to stop)' :
                 voiceState === 'processing' ? 'Processing...' :
                 'Speaking...'
               }
             >
-              {isConversationActive && voiceState === 'idle' && '🔴'}
-              {!isConversationActive && voiceState === 'idle' && '🎤'}
-              {voiceState === 'listening' && '🎤'}
+              {voiceState === 'idle' && '🎤'}
+              {voiceState === 'listening' && '🔴'}
               {voiceState === 'processing' && '⏳'}
               {voiceState === 'speaking' && '🔊'}
             </button>
           </form>
+          
+          {/* Disclaimer */}
+          <div style={{ 
+            textAlign: 'center', 
+            marginTop: '16px', 
+            fontSize: '0.85rem', 
+            color: '#666',
+            fontStyle: 'italic'
+          }}>
+            Highpal can also make mistakes.
+          </div>
         </div>
       )}
     </div>
