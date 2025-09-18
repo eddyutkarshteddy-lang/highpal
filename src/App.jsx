@@ -174,7 +174,7 @@ function App() {
             // Step 2: Send to AI and get response
             try {
               console.log('Sending to AI:', transcript);
-              const response = await fetch('http://localhost:8003/api/ask-pal', {
+              const response = await fetch('http://localhost:8003/ask_question/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 

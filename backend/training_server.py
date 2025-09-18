@@ -41,11 +41,11 @@ except Exception as e:
     OPENAI_AVAILABLE = False
     openai_client = None
 
-# Import training capabilities (optional)
+# Import training capabilities (optional) - Temporarily disabled for voice testing
 try:
-    from training_endpoints import create_training_endpoints
-    TRAINING_AVAILABLE = True
-    logger.info("✅ Training endpoints loaded successfully")
+    # from training_endpoints import create_training_endpoints
+    TRAINING_AVAILABLE = False
+    logger.info("⚠️ Training endpoints temporarily disabled for voice testing")
 except ImportError as e:
     logger.warning(f"⚠️ Training endpoints not available: {e}")
 
@@ -57,9 +57,10 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Speech service not available: {e}")
     SPEECH_AVAILABLE = False
-    TRAINING_AVAILABLE = False
-    def create_training_endpoints(app):
-        pass
+
+# Define empty function for when training is not available
+def create_training_endpoints(app):
+    pass
 
 # Import PDF extractor (optional)
 try:
