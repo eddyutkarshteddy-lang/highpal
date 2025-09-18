@@ -26,6 +26,16 @@ function App() {
   const [continuousMode, setContinuousMode] = useState(false);
   const [autoListenTimeout, setAutoListenTimeout] = useState(null);
   const recognitionRef = useRef(null);
+  
+  // Voice functionality state
+  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [voiceState, setVoiceState] = useState('idle'); // 'idle', 'listening', 'processing', 'speaking'
+  const [audioRef, setAudioRef] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [currentAudio, setCurrentAudio] = useState(null);
 
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
@@ -82,6 +92,205 @@ function App() {
     } else {
       recognitionRef.current && recognitionRef.current.stop();
       setListening(false);
+    }
+  };
+
+  // Voice Conversation Handler (like Sesame)
+  const handleVoiceConversation = async () => {
+    console.log('Voice button clicked, current state:', voiceState);
+    
+    if (voiceState === 'idle') {
+      try {
+        // Check if browser supports speech recognition
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+          alert('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+          return;
+        }
+        
+        // Request microphone permission explicitly
+        try {
+          await navigator.mediaDevices.getUserMedia({ audio: true });
+          console.log('Microphone permission granted');
+        } catch (permissionError) {
+          console.error('Microphone permission denied:', permissionError);
+          alert('Microphone access is required for voice conversation. Please:\n\n1. Click the microphone icon 🎤 in your browser address bar\n2. Select "Allow"\n3. Refresh the page and try again\n\nOr check your browser microphone settings.');
+          return;
+        }
+        
+        setVoiceState('listening');
+        console.log('Starting speech recognition...');
+        
+        // Step 1: Listen for voice input
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.continuous = false;
+        
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+          console.log('Speech recognition timeout - stopping');
+          recognition.stop();
+          setVoiceState('idle');
+        }, 10000); // 10 second timeout
+        
+        recognition.onstart = () => {
+          console.log('Speech recognition started - say something now!');
+        };
+        
+        recognition.onspeechstart = () => {
+          console.log('Speech detected!');
+        };
+        
+        recognition.onspeechend = () => {
+          console.log('Speech ended');
+        };
+        
+        recognition.onnomatch = () => {
+          console.log('No speech was recognized');
+          setVoiceState('idle');
+        };
+        
+        recognition.onresult = async (event) => {
+          clearTimeout(timeoutId); // Clear timeout when we get results
+          console.log('Recognition result event:', event);
+          console.log('Results length:', event.results.length);
+          
+          if (event.results.length > 0) {
+            const transcript = event.results[0][0].transcript;
+            const confidence = event.results[0][0].confidence;
+            console.log('Voice input received:', transcript);
+            console.log('Confidence:', confidence);
+            
+            if (transcript.trim().length === 0) {
+              console.log('Empty transcript received');
+              setVoiceState('idle');
+              return;
+            }
+            
+            setVoiceState('processing');
+            
+            // Step 2: Send to AI and get response
+            try {
+              console.log('Sending to AI:', transcript);
+              const response = await fetch('http://localhost:8003/api/ask-pal', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  question: transcript,
+                  uploaded_files: [],
+                  is_first_message: conversationHistoryPal.length === 0
+                })
+              });
+              
+              console.log('AI response status:', response.status);
+              const data = await response.json();
+              console.log('AI response data:', data);
+              const aiResponse = data.answer || data.response || 'Sorry, I couldn\'t process that.';
+              
+              // Update conversation history
+              const newEntry = { question: transcript, answer: aiResponse };
+              setConversationHistoryPal(prev => [...prev, newEntry]);
+              
+              // Step 3: Convert AI response to speech
+              console.log('Converting to speech:', aiResponse);
+              setVoiceState('speaking');
+              await playAIResponse(aiResponse);
+              
+              // Step 4: Ready for next conversation
+              setVoiceState('idle');
+              console.log('Voice conversation completed');
+              
+            } catch (error) {
+              console.error('Error processing voice conversation:', error);
+              alert('Error processing your request: ' + error.message);
+              setVoiceState('idle');
+            }
+          }
+        };
+        
+        recognition.onerror = (event) => {
+          clearTimeout(timeoutId); // Clear timeout on error
+          console.error('Speech recognition error:', event.error);
+          alert('Speech recognition error: ' + event.error);
+          setVoiceState('idle');
+        };
+        
+        recognition.onend = () => {
+          clearTimeout(timeoutId); // Clear timeout when speech ends
+          console.log('Speech recognition ended');
+          if (voiceState === 'listening') {
+            setVoiceState('idle');
+          }
+        };
+        
+        recognitionRef.current = recognition;
+        recognition.start();
+        
+      } catch (error) {
+        console.error('Error starting voice conversation:', error);
+        alert('Error starting voice conversation: ' + error.message);
+        setVoiceState('idle');
+      }
+    } else if (voiceState === 'listening') {
+      // Stop listening if currently listening
+      console.log('Stopping speech recognition');
+      recognitionRef.current && recognitionRef.current.stop();
+      setVoiceState('idle');
+    }
+  };
+
+  // Play AI response as speech
+  const playAIResponse = async (text) => {
+    try {
+      console.log('Requesting text-to-speech for:', text.substring(0, 50) + '...');
+      const response = await fetch('http://localhost:8003/api/text-to-speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text })
+      });
+      
+      console.log('Text-to-speech response status:', response.status);
+      
+      if (response.ok) {
+        const audioBlob = await response.blob();
+        console.log('Audio blob size:', audioBlob.size);
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        
+        return new Promise((resolve) => {
+          audio.onended = () => {
+            console.log('Audio playback completed');
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+          audio.onerror = (e) => {
+            console.error('Error playing audio:', e);
+            alert('Error playing audio response');
+            resolve();
+          };
+          audio.onloadstart = () => {
+            console.log('Audio loading started');
+          };
+          audio.oncanplay = () => {
+            console.log('Audio can play');
+          };
+          console.log('Starting audio playback');
+          audio.play().catch(e => {
+            console.error('Error starting audio playback:', e);
+            alert('Error playing audio: ' + e.message);
+            resolve();
+          });
+        });
+      } else {
+        const errorText = await response.text();
+        console.error('Text-to-speech error:', response.status, errorText);
+        alert('Error getting speech audio: ' + response.status);
+      }
+    } catch (error) {
+      console.error('Error playing AI response:', error);
+      alert('Error playing AI response: ' + error.message);
     }
   };
 
@@ -508,6 +717,41 @@ function App() {
               }}
             >
               Send
+            </button>
+
+            {/* Voice Conversation Button */}
+            <button 
+              type="button"
+              onClick={handleVoiceConversation}
+              disabled={chatMode === 'book' && uploadedFiles.length === 0}
+              style={{
+                padding: '12px',
+                background: voiceState === 'idle' ? '#28a745' : 
+                           voiceState === 'listening' ? '#dc3545' : 
+                           voiceState === 'processing' ? '#ffc107' : '#17a2b8',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontSize: '1.2rem',
+                minWidth: '48px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: (chatMode === 'book' && uploadedFiles.length === 0) ? 0.5 : 1,
+                transition: 'all 0.3s ease'
+              }}
+              title={
+                voiceState === 'idle' ? 'Start voice conversation' :
+                voiceState === 'listening' ? 'Listening... (click to stop)' :
+                voiceState === 'processing' ? 'Processing...' :
+                'Speaking...'
+              }
+            >
+              {voiceState === 'idle' && '🎤'}
+              {voiceState === 'listening' && '🔴'}
+              {voiceState === 'processing' && '⏳'}
+              {voiceState === 'speaking' && '🔊'}
             </button>
           </form>
           
