@@ -15,12 +15,12 @@ HighPal provides a RESTful API for emotionally intelligent educational assistanc
 - **Pal Engine**: Emotionally aware exam preparation and open conversations
 - **Book Engine**: Document-focused learning with emotional context
 - **Voice Engine**: Azure Speech Services for STT/TTS with emotional expressiveness
-- **Emotion Engine**: Hume AI integration for real-time emotion detection
-- **Memory Engine**: Emotional state tracking and personalized learning patterns
+- **Emotion Engine**: Azure Text Analytics integration for real-time emotion detection
+- **Memory Engine**: Emotional state tracking and personalized learning patterns using Azure insights
 
 ### Voice Processing Pipeline
 - **Azure STT**: Convert student speech to text with high accuracy
-- **Hume AI**: Analyze voice emotions and stress patterns
+- **Azure Text Analytics**: Analyze voice emotions and stress patterns using sentiment analysis
 - **OpenAI**: Generate contextually and emotionally appropriate responses
 - **Azure TTS**: Deliver responses with emotionally expressive neural voices
 
@@ -119,7 +119,7 @@ Convert student speech to text using Azure Speech Services.
 ```
 
 ### `POST /voice/analyze-emotion`
-Analyze emotional state from voice using Hume AI.
+Analyze emotional state from voice using Azure Text Analytics and Speech Services.
 
 **Request:**
 ```json

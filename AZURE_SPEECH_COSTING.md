@@ -200,8 +200,8 @@ Azure Speech Services uses **input-based pricing** - you only pay for what you s
 
 ### **Monthly Budget Allocation:**
 ```
-Voice Processing (Azure): 70% of voice budget
-Emotion Detection (Hume): 20% of voice budget  
+Voice Processing (Azure Speech): 60% of voice budget
+Emotion Detection (Azure Text Analytics): 30% of voice budget  
 Infrastructure (Hosting): 10% of voice budget
 ```
 

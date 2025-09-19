@@ -26,10 +26,10 @@
   - Adaptive teaching pace based on your comprehension and stress levels
 
 ### 🧠 **Advanced AI Integration**
-- **Hume AI**: Industry-leading voice emotion detection and analysis
+- **Azure Speech Services**: Industry-leading speech recognition, synthesis, and voice emotion analysis
+- **Azure Text Analytics**: Advanced sentiment analysis and emotion detection from voice patterns
 - **OpenAI GPT-5**: Latest and most advanced educational content generation and reasoning
-- **Azure Speech Services**: Enterprise-grade STT and TTS with emotional expressiveness
-- **Emotional Response Engine**: Combines academic knowledge with emotional support
+- **Emotional Response Engine**: Combines academic knowledge with emotional support using Azure AI
 - **Voice Synthesis**: Azure Neural Voices with emotionally appropriate responses (calm, encouraging, energetic)
 
 ### 📊 **Emotional Learning Analytics**
@@ -51,10 +51,10 @@
 ### Backend (Emotional AI Orchestration)
 - **Main Server**: `training_server.py` - Enhanced FastAPI with emotion processing
 - **AI Service Layer**: Multi-platform AI integration and orchestration
-  - **Hume AI Client**: Voice emotion detection and analysis
+  - **Azure Text Analytics**: Voice emotion detection and sentiment analysis
   - **OpenAI Client**: Educational content generation and reasoning
   - **Azure Speech Client**: Enterprise STT/TTS with emotional expressiveness
-  - **Emotion Processor**: Combines voice and text emotion analysis
+  - **Emotion Processor**: Combines voice and text emotion analysis using Azure AI
   - **Response Adapter**: Generates emotionally appropriate responses
 - **Voice Pipeline**: Azure-powered emotion-aware speech processing and synthesis
 - **Session Management**: Emotional state tracking and user profiling
@@ -77,7 +77,8 @@
 - Node.js 18+ and npm/yarn
 - Python 3.8+
 - MongoDB Atlas account (free tier works)
-- **Hume AI API Key** (for emotion detection)
+- **Azure Speech Services API Key** (for speech and emotion analysis)
+- **Azure Text Analytics API Key** (for advanced sentiment analysis)
 - **OpenAI API Key** (for educational content generation)
 
 ### 1. Clone the Repository
@@ -95,7 +96,9 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env file with your configuration:
 # MONGODB_URI=your_mongodb_connection_string
-# HUME_API_KEY=your_hume_ai_api_key
+# AZURE_SPEECH_KEY=your_azure_speech_key
+# AZURE_TEXT_ANALYTICS_KEY=your_azure_text_analytics_key
+# AZURE_SPEECH_REGION=your_azure_region
 # OPENAI_API_KEY=your_openai_api_key
 # ENVIRONMENT=development
 ```
@@ -171,7 +174,7 @@ npm run dev
 POST http://localhost:8000/chat/pal
 {
   "message": "I'm stressed about the JEE exam",
-  "voice_emotion_data": {...}  # Hume AI emotion analysis
+  "voice_emotion_data": {...}  # Azure Speech emotion analysis
 }
 
 # Document-based Q&A with emotional context
@@ -219,10 +222,11 @@ POST http://localhost:8000/train/pdf-urls
 ### Environment Variables (.env)
 ```bash
 # AI Service Keys
-HUME_API_KEY=your_hume_ai_api_key_here
-OPENAI_API_KEY=your_openai_api_key_here
 AZURE_SPEECH_KEY=your_azure_speech_services_key_here
 AZURE_SPEECH_REGION=your_azure_region_here
+AZURE_TEXT_ANALYTICS_KEY=your_azure_text_analytics_key_here
+AZURE_TEXT_ANALYTICS_ENDPOINT=your_azure_text_analytics_endpoint_here
+OPENAI_API_KEY=your_openai_api_key_here
 
 # MongoDB Atlas (Required)
 MONGODB_CONNECTION_STRING=mongodb+srv://<username>:<password>@cluster.mongodb.net/
@@ -293,7 +297,7 @@ EMOTIONAL_LOGGING=true
 ### Test Emotional Health Check
 ```bash
 curl http://localhost:8000/health
-# Should return: {"status":"healthy","mongodb":"connected","hume_ai":"connected","openai":"connected","emotional_processing":"active"}
+# Should return: {"status":"healthy","mongodb":"connected","azure_speech":"connected","azure_text_analytics":"connected","openai":"connected","emotional_processing":"active"}
 ```
 
 ### Test Emotional Intelligence
@@ -327,7 +331,7 @@ curl http://localhost:8000/analytics/emotional-dashboard
 ### Production Deployment
 - **Docker Support**: Multi-service containers for all AI integrations
 - **Environment Separation**: Staging and production emotional AI configurations
-- **API Rate Limiting**: Managed quota for Hume AI and OpenAI services
+- **API Rate Limiting**: Managed quota for Azure Speech Services, Azure Text Analytics, and OpenAI services
 - **Security**: Encrypted emotional data storage and transmission
 
 ## 📁 Enhanced Project Structure
@@ -347,7 +351,8 @@ highpal/
 ├── backend/                      # Multi-AI orchestration backend
 │   ├── training_server.py        # 🎯 Enhanced main server (port 8000)
 │   ├── ai_integration/           # NEW: AI service integration
-│   │   ├── hume_client.py        # Hume AI emotion detection
+│   │   ├── azure_speech_client.py   # Azure Speech Services integration
+│   │   ├── azure_text_analytics.py  # Azure Text Analytics for emotion detection
 │   │   ├── openai_client.py      # OpenAI content generation
 │   │   ├── emotion_analyzer.py   # Emotion processing engine
 │   │   └── response_adapter.py   # Emotional response generation
@@ -370,9 +375,9 @@ highpal/
 ## 🎭 Emotional Intelligence Features
 
 ### Real-time Emotion Detection
-- **48+ Distinct Emotions**: Powered by Hume AI's advanced voice analysis
+- **Advanced Emotion Analysis**: Powered by Azure Text Analytics and Speech Services
 - **Live Emotional Feedback**: Real-time emotion indicators during conversations  
-- **Stress Pattern Recognition**: Automatic detection of learning stress and overwhelm
+- **Stress Pattern Recognition**: Automatic detection of learning stress and overwhelm using Azure AI
 - **Confidence Tracking**: Monitor and build learning confidence over time
 
 ### Adaptive Learning Experience
@@ -402,13 +407,13 @@ highpal/
 ## 🎯 Roadmap & Recent Updates
 
 ### 🚀 Version 4.0.0 - Emotional Intelligence Revolution (Current)
-- **🎭 Real-time Emotion Detection**: Hume AI integration for voice emotion analysis
-- **🧠 Emotionally Adaptive AI**: OpenAI + Hume AI combined for intelligent responses
-- **📊 Emotional Analytics**: Track stress, confidence, and learning emotional patterns
-- **🗣️ Voice Emotion Processing**: Real-time emotional feedback during conversations
+- **🎭 Real-time Emotion Detection**: Azure Speech and Text Analytics integration for comprehensive emotion analysis
+- **🧠 Emotionally Adaptive AI**: OpenAI + Azure AI combined for intelligent responses
+- **📊 Emotional Analytics**: Track stress, confidence, and learning emotional patterns using Azure insights
+- **🗣️ Voice Emotion Processing**: Real-time emotional feedback during conversations via Azure Speech Services
 - **💚 Stress Intervention System**: Automatic calming responses for overwhelmed students
 - **🎯 Confidence Building Engine**: Personalized encouragement and motivation system
-- **🔄 Multi-AI Orchestration**: Seamless integration of multiple AI services
+- **🔄 Multi-AI Orchestration**: Seamless integration of Azure AI and OpenAI services
 
 ### ✅ Version 3.0.0 - Enhanced Learning Experience  
 - **📚 Hidden Document Lists**: Clean AI responses without showing training documents
@@ -439,10 +444,10 @@ We welcome contributions to make HighPal the most emotionally intelligent educat
 
 ### Priority Contribution Areas
 1. **📚 Revision Feature Completion**: Complete quiz-based learning system integration (IMMEDIATE)
-2. **Emotional Intelligence Features**: Enhance emotion detection and response algorithms
-3. **AI Integration**: Improve Hume AI and OpenAI orchestration
+2. **Emotional Intelligence Features**: Enhance emotion detection and response algorithms using Azure AI
+3. **AI Integration**: Improve Azure AI and OpenAI orchestration
 4. **User Experience**: Emotional interface design and interaction improvements
-5. **Analytics & Insights**: Advanced emotional learning analytics
+5. **Analytics & Insights**: Advanced emotional learning analytics with Azure insights
 6. **Performance Optimization**: Emotional processing speed and accuracy
 
 ### Development Process
@@ -474,9 +479,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Scientifically Backed**: Uses advanced emotion detection and response psychology
 
 ### 🧠 **Advanced AI Technology Stack**
-- **Hume AI Integration**: Industry-leading voice emotion detection with 48+ emotions
+- **Azure AI Integration**: Enterprise-grade emotion detection with speech and text analytics
+- **Azure Speech Services**: Advanced voice processing with emotion recognition capabilities
 - **OpenAI Enhancement**: GPT-4 powered educational content with emotional context
-- **Emotional Memory**: Learns your emotional patterns and adapts over time
+- **Emotional Memory**: Learns your emotional patterns and adapts over time using Azure insights
 - **Real-time Processing**: Instant emotional feedback and response adaptation
 
 ### 🎓 **Educational Excellence with Emotional Support**

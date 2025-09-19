@@ -20,7 +20,7 @@ Student Voice Input
     ↓
 Azure Speech-to-Text (STT)
     ↓
-Hume AI Emotion Analysis
+Azure Text Analytics Emotion Analysis
     ↓
 OpenAI GPT-5 Content Generation + Emotional Context
     ↓

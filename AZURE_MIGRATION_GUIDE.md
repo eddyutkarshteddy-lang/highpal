@@ -85,9 +85,9 @@ EDUCATIONAL_EMPHASIS_ENABLED=true
 - Environment configuration
 
 ### Phase 2: Emotional Intelligence Integration ✅
-- Hume AI emotion detection
-- Emotionally adaptive voice responses
-- SSML-based emotional expression
+- Azure Text Analytics emotion detection
+- Emotionally adaptive voice responses using Azure insights
+- SSML-based emotional expression with Azure Speech Services
 
 ### Phase 3: Educational Optimizations
 - Subject-specific voice adaptations
