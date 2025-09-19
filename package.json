@@ -1,8 +1,8 @@
 {
   "name": "highpal-educational-assistant",
   "private": true,
-  "version": "4.0.0",
-  "description": "AI-Powered Educational Assistant with Dual Learning Modes",
+  "version": "5.0.0",
+  "description": "AI-Powered Educational Assistant with GPT-5 Integration",
   "type": "module",
   "scripts": {
     "dev": "vite",

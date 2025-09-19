@@ -33,20 +33,21 @@ try:
         raise Exception(f"Invalid API key format. Key starts with: {api_key[:10]}...")
     
     openai_client = OpenAI(api_key=api_key)
-    OPENAI_AVAILABLE = True  # Enable OpenAI for GPT-4
-    logger.info("✅ OpenAI client initialized with GPT-4 support")
+    OPENAI_AVAILABLE = True  # Enable OpenAI for GPT-5
+    logger.info("✅ OpenAI client initialized with GPT-5 support")
     logger.info(f"API key loaded: {api_key[:10]}...{api_key[-4:]}")
 except Exception as e:
     logger.warning(f"⚠️ OpenAI not available: {e}")
     OPENAI_AVAILABLE = False
     openai_client = None
 
-# Import training capabilities (optional) - Temporarily disabled for voice testing
+# Import training capabilities (optional) - Re-enabled for full functionality
 try:
-    # from training_endpoints import create_training_endpoints
-    TRAINING_AVAILABLE = False
-    logger.info("⚠️ Training endpoints temporarily disabled for voice testing")
+    from training_endpoints import create_training_endpoints
+    TRAINING_AVAILABLE = True
+    logger.info("✅ Training endpoints enabled and ready")
 except ImportError as e:
+    TRAINING_AVAILABLE = False
     logger.warning(f"⚠️ Training endpoints not available: {e}")
 
 # Import speech service (optional)
@@ -57,10 +58,6 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️ Speech service not available: {e}")
     SPEECH_AVAILABLE = False
-
-# Define empty function for when training is not available
-def create_training_endpoints(app):
-    pass
 
 # Import PDF extractor (optional)
 try:
@@ -223,16 +220,16 @@ async def test_openai():
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+            model="gpt-5",  # Using GPT-5 (latest available model)
             messages=[
-                {"role": "user", "content": "Say 'GPT-4 connection test successful! HighPal is ready for advanced educational assistance.' in a friendly way."}
+                {"role": "user", "content": "Say 'GPT-5 connection test successful! HighPal is ready for revolutionary educational assistance.' in a friendly way."}
             ],
             max_completion_tokens=50
         )
         return {
             "status": "success",
             "response": response.choices[0].message.content,
-            "model": "gpt-4o"  # Updated model info
+            "model": "gpt-5"  # Updated model info
         }
     except Exception as e:
         logger.error(f"OpenAI test failed: {e}")
@@ -338,18 +335,18 @@ async def search_documents(q: str, limit: int = 10):
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/gpt4-chat")
-async def gpt4_enhanced_chat(request: QuestionRequest):
-    """Enhanced chat endpoint using GPT-4 with emotional intelligence"""
+@app.post("/gpt5-chat")
+async def gpt5_enhanced_chat(request: QuestionRequest):
+    """Enhanced chat endpoint using GPT-5 with emotional intelligence"""
     try:
         query = request.question.strip()
         if not query:
             raise HTTPException(status_code=400, detail="Question cannot be empty")
         
-        logger.info(f"GPT-4 Chat request: {query}")
+        logger.info(f"GPT-5 Chat request: {query}")
         
         if not OPENAI_AVAILABLE:
-            raise HTTPException(status_code=503, detail="GPT-4 service not available")
+            raise HTTPException(status_code=503, detail="GPT-5 service not available")
         
         # Enhanced system prompt for educational assistance
         system_prompt = """You are Pal, a helpful AI assistant. Answer questions naturally and directly without unnecessary technical references."""
@@ -357,7 +354,7 @@ async def gpt4_enhanced_chat(request: QuestionRequest):
         
         try:
             response = openai_client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-5",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": query}
@@ -373,19 +370,19 @@ async def gpt4_enhanced_chat(request: QuestionRequest):
             return {
                 "question": query,
                 "answer": answer,
-                "model": "gpt-4o",
+                "model": "gpt-5",
                 "timestamp": datetime.now().isoformat(),
                 "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
             }
             
         except Exception as e:
-            logger.error(f"GPT-4 API error: {e}")
-            raise HTTPException(status_code=500, detail=f"GPT-4 processing error: {str(e)}")
+            logger.error(f"GPT-5 API error: {e}")
+            raise HTTPException(status_code=500, detail=f"GPT-5 processing error: {str(e)}")
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"GPT-4 chat error: {e}")
+        logger.error(f"GPT-5 chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask_question/")
@@ -438,7 +435,7 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         if valid_search_results:
             context = "\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
             
-            # Use OpenAI GPT-4 to generate intelligent response
+            # Use OpenAI GPT-5 to generate intelligent response
             if OPENAI_AVAILABLE and openai_client:
                 try:
                     # Choose system prompt based on whether this is the first message
@@ -488,7 +485,7 @@ STRUCTURE (with line breaks between each):
 4. Keep it educational and helpful"""
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+                        model="gpt-5",  # Using GPT-5 (latest available model)
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": f"Question: {query}\n\nAnswer this question directly and simply. Only mention the document context if it's specifically relevant to the question."}
@@ -504,7 +501,7 @@ STRUCTURE (with line breaks between each):
             else:
                 answer = f"Here's what I found about '{query}': {context[:500]}..."
         else:
-            # Use OpenAI GPT-4 for general educational assistance when no context is available
+            # Use OpenAI GPT-5 for general educational assistance when no context is available
             if OPENAI_AVAILABLE and openai_client:
                 try:
                     # Choose system prompt based on whether this is the first message
@@ -551,7 +548,7 @@ STRUCTURE:
 3. Numerical example"""
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-4o",  # Using GPT-4 Omni (latest available model)
+                        model="gpt-5",  # Using GPT-5 (latest available model)
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": query}
@@ -611,8 +608,12 @@ async def list_documents(limit: int = 20, source_type: str = None):
         logger.error(f"List documents error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Add training endpoints to the app
-create_training_endpoints(app)
+# Add training endpoints to the app if available
+if TRAINING_AVAILABLE:
+    create_training_endpoints(app)
+    logger.info("✅ Training endpoints added to FastAPI app")
+else:
+    logger.info("⚠️ Training endpoints not added - module not available")
 
 @app.get("/training-guide")
 async def training_guide():

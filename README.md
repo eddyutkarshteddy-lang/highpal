@@ -1,10 +1,10 @@
-# 🎓 HighPal - Emotionally Intelligent AI Educational Assistant
+# 🎓 HighPal - GPT-5 Powered Emotionally Intelligent AI Educational Assistant
 
-**HighPal** is the first AI educational assistant that understands both what you need to learn AND how you feel while learning. Combining advanced emotional intelligence with comprehensive educational support, HighPal adapts to your emotional state and learning needs in real-time.
+**HighPal** is the first AI educational assistant powered by **GPT-5** that understands both what you need to learn AND how you feel while learning. Combining revolutionary GPT-5 intelligence with comprehensive educational support, HighPal adapts to your emotional state and learning needs in real-time.
 
-![Version](https://img.shields.io/badge/version-4.0.0-blue)
-![Status](https://img.shields.io/badge/status-enhanced-green)
-![AI](https://img.shields.io/badge/AI-Emotional%20Intelligence-purple)
+![Version](https://img.shields.io/badge/version-5.0.0-blue)
+![Status](https://img.shields.io/badge/status-GPT--5%20Enhanced-green)
+![AI](https://img.shields.io/badge/AI-GPT--5%20Powered-purple)
 ![Voice](https://img.shields.io/badge/Voice-Emotion%20Aware-orange)
 
 ## ✨ Revolutionary Features
@@ -28,7 +28,7 @@
 ### 🧠 **Advanced AI Integration**
 - **Azure Speech Services**: Industry-leading speech recognition, synthesis, and voice emotion analysis
 - **Azure Text Analytics**: Advanced sentiment analysis and emotion detection from voice patterns
-- **OpenAI GPT-5**: Latest and most advanced educational content generation and reasoning
+- **OpenAI GPT-5**: Revolutionary next-generation educational content generation and reasoning
 - **Emotional Response Engine**: Combines academic knowledge with emotional support using Azure AI
 - **Voice Synthesis**: Azure Neural Voices with emotionally appropriate responses (calm, encouraging, energetic)
 
@@ -52,7 +52,7 @@
 - **Main Server**: `training_server.py` - Enhanced FastAPI with emotion processing
 - **AI Service Layer**: Multi-platform AI integration and orchestration
   - **Azure Text Analytics**: Voice emotion detection and sentiment analysis
-  - **OpenAI Client**: Educational content generation and reasoning
+  - **OpenAI Client**: GPT-5 content generation and reasoning
   - **Azure Speech Client**: Enterprise STT/TTS with emotional expressiveness
   - **Emotion Processor**: Combines voice and text emotion analysis using Azure AI
   - **Response Adapter**: Generates emotionally appropriate responses
@@ -60,7 +60,7 @@
 - **Session Management**: Emotional state tracking and user profiling
 - **Port**: API server runs on `http://localhost:8000`
 
-- **OpenAI Integration**: GPT-4 for educational content, explanations, and reasoning
+- **OpenAI Integration**: GPT-5 for educational content, explanations, and reasoning
 - **Emotion Database**: Emotional history tracking and pattern analysis
 - **Adaptive Engine**: Real-time response adjustment based on emotional feedback
 
@@ -481,7 +481,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### 🧠 **Advanced AI Technology Stack**
 - **Azure AI Integration**: Enterprise-grade emotion detection with speech and text analytics
 - **Azure Speech Services**: Advanced voice processing with emotion recognition capabilities
-- **OpenAI Enhancement**: GPT-4 powered educational content with emotional context
+- **OpenAI Enhancement**: GPT-5 powered educational content with emotional context
 - **Emotional Memory**: Learns your emotional patterns and adapts over time using Azure insights
 - **Real-time Processing**: Instant emotional feedback and response adaptation
 

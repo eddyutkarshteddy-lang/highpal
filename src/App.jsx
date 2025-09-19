@@ -43,6 +43,13 @@ function App() {
   const [turnCount, setTurnCount] = useState(0);
   const continuousRecognitionRef = useRef(null);
   const conversationActiveRef = useRef(false);
+  const conversationPausedRef = useRef(false);
+  
+  // Voice overlay state
+  const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
+  const [isConversationPaused, setIsConversationPaused] = useState(false);
+  const [inactivityTimeout, setInactivityTimeout] = useState(null);
+  const [overlayAnimation, setOverlayAnimation] = useState('slide-up');
 
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
@@ -139,8 +146,11 @@ function App() {
     console.log('Ending conversation');
     setIsConversationActive(false);
     conversationActiveRef.current = false;
+    conversationPausedRef.current = false;
     setVoiceState('idle');
     setTurnCount(0);
+    setIsConversationPaused(false);
+    setShowVoiceOverlay(false);
     
     // Stop any ongoing recognition
     if (continuousRecognitionRef.current) {
@@ -153,6 +163,56 @@ function App() {
       clearTimeout(conversationTimeout);
       setConversationTimeout(null);
     }
+    
+    if (inactivityTimeout) {
+      clearTimeout(inactivityTimeout);
+      setInactivityTimeout(null);
+    }
+  };
+
+  const pauseConversation = () => {
+    console.log('Pausing conversation');
+    setIsConversationPaused(true);
+    conversationPausedRef.current = true;
+    setVoiceState('idle');
+    
+    // Stop ongoing recognition
+    if (continuousRecognitionRef.current) {
+      continuousRecognitionRef.current.stop();
+      continuousRecognitionRef.current = null;
+    }
+    
+    // Clear inactivity timeout since we're pausing
+    if (inactivityTimeout) {
+      clearTimeout(inactivityTimeout);
+      setInactivityTimeout(null);
+    }
+  };
+
+  const resumeConversation = () => {
+    console.log('Resuming conversation');
+    setIsConversationPaused(false);
+    conversationPausedRef.current = false;
+    
+    // Restart conversation loop
+    setTimeout(() => {
+      conversationLoop();
+    }, 500);
+  };
+
+  const startInactivityTimer = () => {
+    // Clear existing timer
+    if (inactivityTimeout) {
+      clearTimeout(inactivityTimeout);
+    }
+    
+    // Set 5-minute (300000ms) timer
+    const timer = setTimeout(() => {
+      console.log('Auto-pausing due to inactivity');
+      pauseConversation();
+    }, 300000);
+    
+    setInactivityTimeout(timer);
   };
 
   // Play AI response using browser speech synthesis (fallback) or Azure Speech Service
@@ -256,9 +316,12 @@ function App() {
     console.log('Voice button clicked, current state:', voiceState, 'Active:', isConversationActive);
     
     if (isConversationActive) {
-      // End the conversation
+      // End the conversation with smooth overlay exit
+      setOverlayAnimation('slide-down');
       await playAIResponse("Ending our conversation. Goodbye!");
-      endConversation();
+      setTimeout(() => {
+        endConversation();
+      }, 300); // Wait for animation to complete
       return;
     }
 
@@ -272,7 +335,9 @@ function App() {
       return;
     }
 
-    // Start continuous conversation
+    // Start continuous conversation with overlay
+    setShowVoiceOverlay(true);
+    setOverlayAnimation('slide-up');
     await startContinuousConversation();
   };
 
@@ -280,6 +345,7 @@ function App() {
     console.log('Starting continuous conversation');
     setIsConversationActive(true);
     conversationActiveRef.current = true;
+    conversationPausedRef.current = false;
     setTurnCount(0);
     
     // Welcome message
@@ -296,27 +362,39 @@ function App() {
   const conversationLoop = async () => {
     console.log('ConversationLoop started, conversationActiveRef:', conversationActiveRef.current);
     
-    while (conversationActiveRef.current) {
+    while (conversationActiveRef.current && !conversationPausedRef.current) {
       try {
         console.log('Starting new turn in conversation loop');
         
-        // Double check if conversation was ended
-        if (!conversationActiveRef.current) {
-          console.log('Conversation was ended, breaking loop');
+        // Double check if conversation was ended or paused
+        if (!conversationActiveRef.current || conversationPausedRef.current) {
+          console.log('Conversation was ended or paused, breaking loop');
           break;
         }
         
         setVoiceState('listening');
         console.log('Voice state set to listening, about to start listening...');
         
+        // Start inactivity timer
+        startInactivityTimer();
+        
         // Listen for user input
         const userInput = await startContinuousListening();
         console.log('User said:', userInput);
         
+        // Clear inactivity timer since user spoke
+        if (inactivityTimeout) {
+          clearTimeout(inactivityTimeout);
+          setInactivityTimeout(null);
+        }
+        
         // Check if user wants to end conversation
         if (isEndCommand(userInput)) {
+          setOverlayAnimation('slide-down');
           await playAIResponse("Goodbye! Thanks for our conversation. Feel free to chat with me anytime!");
-          endConversation();
+          setTimeout(() => {
+            endConversation();
+          }, 300);
           return;
         }
         
@@ -341,10 +419,10 @@ function App() {
         console.log('Conversation error:', error.message);
         
         if (error.message === 'Speech timeout') {
-          // Handle timeout gracefully
-          setVoiceState('speaking');
-          await playAIResponse("I didn't hear anything. Do you have another question, or should we end our conversation?");
-          // Continue the loop to give another chance
+          // Handle timeout gracefully - auto-pause instead of continuing
+          console.log('Speech timeout - auto-pausing conversation');
+          pauseConversation();
+          break;
         } else {
           // Other errors - end conversation
           console.error('Ending conversation due to error:', error);
@@ -873,6 +951,138 @@ function App() {
               {voiceState === 'speaking' && '🔊'}
             </button>
           </form>
+        </div>
+      )}
+      
+      {/* Voice Conversation Overlay */}
+      {showVoiceOverlay && (
+        <div 
+          className={`voice-overlay ${overlayAnimation}`}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(124, 74, 253, 0.15)',
+            backdropFilter: 'blur(20px)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            gap: '32px'
+          }}
+        >
+          {/* Voice Status Display */}
+          <div style={{
+            textAlign: 'center',
+            color: '#181c2a',
+            marginBottom: '40px'
+          }}>
+            <div style={{
+              fontSize: '4rem',
+              marginBottom: '16px'
+            }}>
+              {isConversationPaused ? '⏸️' :
+               voiceState === 'listening' ? '🎤' :
+               voiceState === 'processing' ? '⚡' :
+               voiceState === 'speaking' ? '🔊' : '🎧'}
+            </div>
+            <h2 style={{
+              fontSize: '2.5rem',
+              fontWeight: '700',
+              marginBottom: '8px'
+            }}>
+              {isConversationPaused ? 'Conversation Paused' :
+               voiceState === 'listening' ? 'Listening...' :
+               voiceState === 'processing' ? 'Thinking...' :
+               voiceState === 'speaking' ? 'Speaking...' : 'Voice Mode Active'}
+            </h2>
+            <p style={{
+              fontSize: '1.2rem',
+              opacity: 0.8
+            }}>
+              {isConversationPaused ? 'Click RESUME to continue or END to finish' :
+               voiceState === 'listening' ? 'Speak now, I\'m listening to your question' :
+               voiceState === 'processing' ? 'Processing your question and preparing response' :
+               voiceState === 'speaking' ? 'Listen to my response' : 'Ready for conversation'}
+            </p>
+          </div>
+
+          {/* Control Buttons */}
+          <div style={{
+            display: 'flex',
+            gap: '24px',
+            alignItems: 'center'
+          }}>
+            {/* PAUSE/RESUME Button */}
+            <button
+              onClick={isConversationPaused ? resumeConversation : pauseConversation}
+              disabled={voiceState === 'processing' || voiceState === 'speaking'}
+              style={{
+                padding: '16px 32px',
+                background: isConversationPaused ? '#28a745' : '#ffc107',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50px',
+                fontSize: '1.2rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                minWidth: '140px',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                transition: 'all 0.3s ease',
+                opacity: (voiceState === 'processing' || voiceState === 'speaking') ? 0.6 : 1
+              }}
+            >
+              {isConversationPaused ? '▶️ RESUME' : '⏸️ PAUSE'}
+            </button>
+
+            {/* END Button */}
+            <button
+              onClick={async () => {
+                setOverlayAnimation('slide-down');
+                await playAIResponse("Ending our conversation. Goodbye!");
+                setTimeout(() => {
+                  endConversation();
+                }, 300);
+              }}
+              style={{
+                padding: '16px 32px',
+                background: '#dc3545',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50px',
+                fontSize: '1.2rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                minWidth: '140px',
+                boxShadow: '0 4px 16px rgba(220, 53, 69, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              🔴 END
+            </button>
+          </div>
+
+          {/* Conversation Stats */}
+          {turnCount > 0 && (
+            <div style={{
+              position: 'absolute',
+              bottom: '40px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              color: '#181c2a',
+              fontSize: '1rem',
+              opacity: 0.7,
+              textAlign: 'center'
+            }}>
+              <p>Conversation turns: {turnCount}</p>
+              <p style={{ fontSize: '0.9rem', marginTop: '4px' }}>
+                Say "goodbye" or "end" to finish naturally
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
