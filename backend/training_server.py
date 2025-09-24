@@ -33,8 +33,8 @@ try:
         raise Exception(f"Invalid API key format. Key starts with: {api_key[:10]}...")
     
     openai_client = OpenAI(api_key=api_key)
-    OPENAI_AVAILABLE = True  # Enable OpenAI for GPT-5
-    logger.info("✅ OpenAI client initialized with GPT-5 support")
+    OPENAI_AVAILABLE = True  # Enable OpenAI for GPT-4o
+    logger.info("✅ OpenAI client initialized with GPT-4o support")
     logger.info(f"API key loaded: {api_key[:10]}...{api_key[-4:]}")
 except Exception as e:
     logger.warning(f"⚠️ OpenAI not available: {e}")
@@ -220,16 +220,16 @@ async def test_openai():
     
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-5",  # Using GPT-5 (latest available model)
+            model="gpt-4o",  # Using GPT-4o
             messages=[
-                {"role": "user", "content": "Say 'GPT-5 connection test successful! HighPal is ready for revolutionary educational assistance.' in a friendly way."}
+                {"role": "user", "content": "Say 'GPT-4o connection test successful! HighPal is ready for educational assistance.' in a friendly way."}
             ],
             max_completion_tokens=50
         )
         return {
             "status": "success",
             "response": response.choices[0].message.content,
-            "model": "gpt-5"  # Updated model info
+            "model": "gpt-4o"  # Updated model info
         }
     except Exception as e:
         logger.error(f"OpenAI test failed: {e}")
@@ -337,16 +337,16 @@ async def search_documents(q: str, limit: int = 10):
 
 @app.post("/gpt5-chat")
 async def gpt5_enhanced_chat(request: QuestionRequest):
-    """Enhanced chat endpoint using GPT-5 with emotional intelligence"""
+    """Enhanced chat endpoint using GPT-4.1 with emotional intelligence"""
     try:
         query = request.question.strip()
         if not query:
             raise HTTPException(status_code=400, detail="Question cannot be empty")
         
-        logger.info(f"GPT-5 Chat request: {query}")
+        logger.info(f"GPT-4o Chat request: {query}")
         
         if not OPENAI_AVAILABLE:
-            raise HTTPException(status_code=503, detail="GPT-5 service not available")
+            raise HTTPException(status_code=503, detail="GPT-4o service not available")
         
         # Enhanced system prompt for educational assistance
         system_prompt = """You are Pal, a helpful AI assistant. Answer questions naturally and directly without unnecessary technical references."""
@@ -354,13 +354,12 @@ async def gpt5_enhanced_chat(request: QuestionRequest):
         
         try:
             response = openai_client.chat.completions.create(
-                model="gpt-5",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": query}
                 ],
                 max_completion_tokens=1000,
-                temperature=0.7,
                 presence_penalty=0.1,
                 frequency_penalty=0.1
             )
@@ -370,19 +369,19 @@ async def gpt5_enhanced_chat(request: QuestionRequest):
             return {
                 "question": query,
                 "answer": answer,
-                "model": "gpt-5",
+                "model": "gpt-4o",
                 "timestamp": datetime.now().isoformat(),
                 "tokens_used": response.usage.total_tokens if hasattr(response, 'usage') else None
             }
             
         except Exception as e:
-            logger.error(f"GPT-5 API error: {e}")
-            raise HTTPException(status_code=500, detail=f"GPT-5 processing error: {str(e)}")
+            logger.error(f"GPT-4o API error: {e}")
+            raise HTTPException(status_code=500, detail=f"GPT-4o processing error: {str(e)}")
             
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"GPT-5 chat error: {e}")
+        logger.error(f"GPT-4o chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask_question/")
@@ -435,7 +434,7 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         if valid_search_results:
             context = "\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
             
-            # Use OpenAI GPT-5 to generate intelligent response
+            # Use OpenAI GPT-4o to generate intelligent response
             if OPENAI_AVAILABLE and openai_client:
                 try:
                     # Choose system prompt based on whether this is the first message
@@ -485,23 +484,24 @@ STRUCTURE (with line breaks between each):
 4. Keep it educational and helpful"""
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-5",  # Using GPT-5 (latest available model)
+                        model="gpt-4o",  # Using GPT-4o
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": f"Question: {query}\n\nAnswer this question directly and simply. Only mention the document context if it's specifically relevant to the question."}
                         ],
-                        max_completion_tokens=400,  # Reduced for more concise responses
-                        temperature=0.7
+                        max_completion_tokens=400  # Reduced for more concise responses
                     )
-                    answer = response.choices[0].message.content
-                    answer = clean_response_formatting(answer)
+                    raw_answer = response.choices[0].message.content
+                    logger.info(f"GPT-4o raw response: {raw_answer[:200] if raw_answer else 'EMPTY'}...")
+                    answer = clean_response_formatting(raw_answer)
+                    logger.info(f"Cleaned response: {answer[:200] if answer else 'EMPTY'}...")
                 except Exception as e:
                     logger.error(f"OpenAI API error: {e}")
                     answer = f"Based on the documents you've uploaded, here's what I found: {context[:300]}... (I'm having a small technical issue with my AI enhancement right now, but I'm still here to help!)"
             else:
                 answer = f"Here's what I found about '{query}': {context[:500]}..."
         else:
-            # Use OpenAI GPT-5 for general educational assistance when no context is available
+            # Use OpenAI GPT-4o for general educational assistance when no context is available
             if OPENAI_AVAILABLE and openai_client:
                 try:
                     # Choose system prompt based on whether this is the first message
@@ -548,13 +548,12 @@ STRUCTURE:
 3. Numerical example"""
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-5",  # Using GPT-5 (latest available model)
+                        model="gpt-4o",  # Using GPT-4o
                         messages=[
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": query}
                         ],
-                        max_completion_tokens=400,  # Reduced for more concise responses
-                        temperature=0.7
+                        max_completion_tokens=400  # Reduced for more concise responses
                     )
                     answer = response.choices[0].message.content
                     answer = clean_response_formatting(answer)
@@ -565,6 +564,7 @@ STRUCTURE:
                 answer = f"I don't have specific information about '{query}' in my knowledge base right now. Could you try rephrasing your question or ask about a different topic?"
         
         # Don't show documents to users - they're only for training/context
+        logger.info(f"Final response - Question: '{query}', Answer: '{answer[:100] if answer else 'EMPTY'}...'")
         return {
             "question": query,
             "answer": answer
@@ -666,15 +666,15 @@ async def start_revision_session(request: RevisionRequest):
     """
     try:
         # Check if document exists
-        haystack_mongo = haystack_integration if hasattr(globals(), 'haystack_integration') and haystack_integration else None
-        if not haystack_mongo:
+        mongo = get_mongo_integration()
+        if not mongo:
             return JSONResponse(
                 status_code=503,
                 content={"error": "Document processing service not available"}
             )
         
         # Get document content
-        doc_search = await haystack_mongo.search_documents(
+        doc_search = mongo.search_documents(
             query=f"document:{request.document_id}",
             top_k=20
         )

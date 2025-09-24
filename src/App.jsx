@@ -50,6 +50,8 @@ function App() {
   const [isConversationPaused, setIsConversationPaused] = useState(false);
   const [inactivityTimeout, setInactivityTimeout] = useState(null);
   const [overlayAnimation, setOverlayAnimation] = useState('slide-up');
+  const [lastRecognizedText, setLastRecognizedText] = useState('');
+  const [lastProcessedText, setLastProcessedText] = useState('');
 
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
@@ -91,6 +93,117 @@ function App() {
     endpoint: `https://${import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia"}.tts.speech.microsoft.com/`
   };
 
+  // Enhanced Mathematical expression post-processing
+  const processMathematicalText = (text) => {
+    let processedText = text.toLowerCase();
+    
+    // More comprehensive mathematical speech patterns and corrections
+    const mathCorrections = {
+      // Common misheard trigonometric functions
+      'sign': 'sin',
+      'sine': 'sin',
+      'sin of': 'sin',
+      'sign of': 'sin',
+      'coastline': 'cos',
+      'cosign': 'cos',
+      'cosine': 'cos',
+      'cos of': 'cos',
+      'cause': 'cos',
+      'course': 'cos',
+      'tangent': 'tan',
+      'tan of': 'tan',
+      'cotangent': 'cot',
+      'secant': 'sec',
+      'cosecant': 'csc',
+      
+      // Powers and exponents
+      'squared': '²',
+      'cubed': '³',
+      'to the power of 2': '²',
+      'to the power of 3': '³',
+      'power 2': '²',
+      'power 3': '³',
+      'power two': '²',
+      'power three': '³',
+      'raised to 2': '²',
+      'raised to the power 2': '²',
+      
+      // Greek letters (common misheard)
+      'theta': 'θ',
+      'beta': 'β',
+      'alpha': 'α',
+      'gamma': 'γ',
+      'delta': 'δ',
+      'lambda': 'λ',
+      'pi': 'π',
+      'sigma': 'σ',
+      'omega': 'ω',
+      'phi': 'φ',
+      'data': 'θ', // Common mishearing
+      'theater': 'θ',
+      'feta': 'θ',
+      
+      // Mathematical operators
+      'plus': '+',
+      'add': '+',
+      'minus': '-',
+      'subtract': '-',
+      'times': '×',
+      'multiply': '×',
+      'divided by': '÷',
+      'equals': '=',
+      'equal to': '=',
+      'not equal': '≠',
+      'less than or equal': '≤',
+      'greater than or equal': '≥',
+      
+      // Common mathematical terms that get misheard
+      'derivative': 'derivative',
+      'integral': 'integral',
+      'limit': 'limit',
+      'infinity': '∞',
+      'root': '√',
+      'square root': '√',
+      
+      // Question starters
+      'what is': 'what is',
+      'find': 'find',
+      'calculate': 'calculate',
+      'solve': 'solve',
+      'evaluate': 'evaluate',
+    };
+    
+    // Apply corrections with word boundaries
+    Object.entries(mathCorrections).forEach(([wrong, correct]) => {
+      const regex = new RegExp(`\\b${wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      processedText = processedText.replace(regex, correct);
+    });
+    
+    // Handle specific mathematical expressions with more patterns
+    processedText = processedText
+      // Fix sin squared patterns
+      .replace(/sin\s*\^?\s*2/gi, 'sin²')
+      .replace(/sine\s*squared/gi, 'sin²')
+      .replace(/sign\s*squared/gi, 'sin²')
+      // Fix cos squared patterns  
+      .replace(/cos\s*\^?\s*2/gi, 'cos²')
+      .replace(/cosine\s*squared/gi, 'cos²')
+      .replace(/cause\s*squared/gi, 'cos²')
+      // Fix variable squares
+      .replace(/\bx\s*\^?\s*2/gi, 'x²')
+      .replace(/\by\s*\^?\s*2/gi, 'y²')
+      .replace(/\bz\s*\^?\s*2/gi, 'z²')
+      // Fix theta patterns
+      .replace(/\bdata\b/gi, 'θ')
+      .replace(/\bfeta\b/gi, 'θ')
+      .replace(/\btheater\b/gi, 'θ')
+      // Clean up spacing
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    return processedText;
+  };
+
   // Continuous conversation helper functions
   const isEndCommand = (text) => {
     const endPhrases = [
@@ -110,35 +223,86 @@ function App() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
       
-      recognition.continuous = false;
-      recognition.interimResults = false;
+      // Optimize settings for much better accuracy
+      recognition.continuous = true; // Allow longer speech
+      recognition.interimResults = true; // Show results as user speaks
       recognition.lang = 'en-US';
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3; // Get multiple options
 
+      let finalTranscript = '';
       let timeout = setTimeout(() => {
         recognition.stop();
-        reject(new Error('Speech timeout'));
-      }, 30000); // 30 second timeout
+        if (finalTranscript.trim()) {
+          resolve(finalTranscript.trim());
+        } else {
+          reject(new Error('No speech detected'));
+        }
+      }, 20000); // 20 second timeout
 
       recognition.onresult = (event) => {
-        clearTimeout(timeout);
-        const transcript = event.results[0][0].transcript.trim();
-        console.log('Recognized speech:', transcript);
-        resolve(transcript);
+        let interimTranscript = '';
+        
+        // Process all results
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            console.log('🎤 FINAL SPEECH:', finalTranscript);
+            
+            // Clear timeout and resolve immediately when we get final result
+            clearTimeout(timeout);
+            
+            // Apply mathematical text processing
+            const processedTranscript = processMathematicalText(finalTranscript.trim());
+            console.log('🧮 PROCESSED:', processedTranscript);
+            
+            // Store for debugging display
+            setLastRecognizedText(finalTranscript.trim());
+            setLastProcessedText(processedTranscript);
+            
+            recognition.stop();
+            resolve(processedTranscript);
+            return;
+          } else {
+            interimTranscript += transcript;
+            console.log('🎤 INTERIM:', interimTranscript);
+          }
+        }
       };
 
       recognition.onerror = (event) => {
         clearTimeout(timeout);
         console.error('Speech recognition error:', event.error);
-        reject(new Error(`Speech recognition error: ${event.error}`));
+        
+        // Try to restart recognition on certain errors
+        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+          setTimeout(() => {
+            console.log('Restarting speech recognition...');
+            recognition.start();
+          }, 1000);
+        } else {
+          reject(new Error(`Speech recognition error: ${event.error}`));
+        }
+      };
+
+      recognition.onstart = () => {
+        console.log('🎤 Speech recognition started - speak now!');
       };
 
       recognition.onend = () => {
+        console.log('🎤 Speech recognition ended');
         clearTimeout(timeout);
       };
 
       continuousRecognitionRef.current = recognition;
-      recognition.start();
+      
+      // Start recognition
+      try {
+        recognition.start();
+      } catch (error) {
+        reject(new Error(`Failed to start recognition: ${error.message}`));
+      }
     });
   };
 
@@ -466,23 +630,68 @@ function App() {
     }
   };
 
-  // Mic functionality
+  // Enhanced Mic functionality with better accuracy
   const handleMicClick = () => {
     if (!listening) {
       const recognition = new window.webkitSpeechRecognition();
+      
+      // Enhanced settings for better speech recognition
+      recognition.continuous = true; // Allow longer speech
+      recognition.interimResults = true; // Show real-time results
       recognition.lang = 'en-US';
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      recognition.maxAlternatives = 3; // Multiple alternatives
+      
+      let finalTranscript = '';
+      
       recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        if (chatMode === 'pal') {
-          setQuestionPal(transcript);
-        } else {
-          setQuestionBook(transcript);
+        let interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+            console.log('🎤 Mic Final:', finalTranscript);
+            
+            // Apply mathematical text processing
+            const processedText = processMathematicalText(finalTranscript.trim());
+            console.log('🧮 Mic Processed:', processedText);
+            
+            if (chatMode === 'pal') {
+              setQuestionPal(processedText);
+            } else {
+              setQuestionBook(processedText);
+            }
+            setListening(false);
+            recognition.stop();
+          } else {
+            interimTranscript += transcript;
+            console.log('🎤 Mic Interim:', interimTranscript);
+            
+            // Show interim results in real-time
+            if (chatMode === 'pal') {
+              setQuestionPal(interimTranscript);
+            } else {
+              setQuestionBook(interimTranscript);
+            }
+          }
         }
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Mic recognition error:', event.error);
         setListening(false);
       };
-      recognition.onend = () => setListening(false);
+      
+      recognition.onend = () => {
+        console.log('🎤 Mic recognition ended');
+        setListening(false);
+      };
+      
+      recognition.onstart = () => {
+        console.log('🎤 Mic recognition started');
+      };
+      
       recognitionRef.current = recognition;
       recognition.start();
       setListening(true);
@@ -1008,6 +1217,53 @@ function App() {
                voiceState === 'processing' ? 'Processing your question and preparing response' :
                voiceState === 'speaking' ? 'Listen to my response' : 'Ready for conversation'}
             </p>
+            
+            {/* Mathematical Recognition Feedback */}
+            {(lastRecognizedText || lastProcessedText) && (
+              <div style={{
+                marginTop: '20px',
+                padding: '16px',
+                background: 'rgba(255,255,255,0.9)',
+                borderRadius: '12px',
+                fontSize: '0.9rem',
+                maxWidth: '500px',
+                margin: '20px auto 0'
+              }}>
+                {lastRecognizedText && (
+                  <div style={{ marginBottom: '8px' }}>
+                    <strong>🎤 What I heard:</strong> 
+                    <br />
+                    <span style={{ 
+                      fontFamily: 'monospace', 
+                      background: '#f0f0f0', 
+                      padding: '4px 8px', 
+                      borderRadius: '4px',
+                      display: 'inline-block',
+                      marginTop: '4px'
+                    }}>
+                      {lastRecognizedText}
+                    </span>
+                  </div>
+                )}
+                {lastProcessedText && lastProcessedText !== lastRecognizedText && (
+                  <div>
+                    <strong>🧮 Mathematical correction:</strong>
+                    <br />
+                    <span style={{ 
+                      fontFamily: 'monospace', 
+                      color: '#7c4afd',
+                      background: '#f8f5ff',
+                      padding: '4px 8px', 
+                      borderRadius: '4px',
+                      display: 'inline-block',
+                      marginTop: '4px'
+                    }}>
+                      {lastProcessedText}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Control Buttons */}
@@ -1080,6 +1336,36 @@ function App() {
               <p>Conversation turns: {turnCount}</p>
               <p style={{ fontSize: '0.9rem', marginTop: '4px' }}>
                 Say "goodbye" or "end" to finish naturally
+              </p>
+            </div>
+          )}
+          
+          {/* Enhanced Speech Tips */}
+          {voiceState === 'listening' && (
+            <div style={{
+              position: 'absolute',
+              bottom: '40px',
+              right: '40px',
+              background: 'rgba(255,255,255,0.95)',
+              padding: '16px',
+              borderRadius: '12px',
+              fontSize: '0.85rem',
+              maxWidth: '280px',
+              color: '#181c2a',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#7c4afd' }}>🎤 Speech Tips:</h4>
+              <p style={{ margin: '6px 0', lineHeight: '1.4' }}>
+                <strong>📢 Speak clearly and slowly</strong>
+              </p>
+              <p style={{ margin: '6px 0', lineHeight: '1.4' }}>
+                <strong>🧮 For math:</strong> "sine squared theta plus cosine squared theta"
+              </p>
+              <p style={{ margin: '6px 0', lineHeight: '1.4' }}>
+                <strong>⏸️ Pause briefly</strong> between complex terms
+              </p>
+              <p style={{ margin: '6px 0', lineHeight: '1.4' }}>
+                <strong>🔄 Repeat</strong> if not recognized correctly
               </p>
             </div>
           )}
