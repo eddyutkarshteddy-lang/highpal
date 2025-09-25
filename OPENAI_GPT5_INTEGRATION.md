@@ -1,6 +1,6 @@
-# 🚀 GPT-5 Integration for HighPal
+# 🚀 GPT-4o Integration for HighPal
 
-This document covers the integration of OpenAI's GPT-5 model into HighPal's emotionally intelligent educational assistant.
+This document covers the integration of OpenAI's GPT-4o model into HighPal's emotionally intelligent educational assistant.
 
 ## 🎯 **Why GPT-5 for Educational AI?**
 

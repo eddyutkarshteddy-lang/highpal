@@ -93,111 +93,100 @@ function App() {
     endpoint: `https://${import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia"}.tts.speech.microsoft.com/`
   };
 
-  // Enhanced Mathematical expression post-processing
+  // Smart Mathematical expression post-processing (only for math questions)
+  const isMathematicalQuery = (text) => {
+    const cleanText = text.toLowerCase().trim();
+    
+    // If it's too short (like "hi"), it's definitely not math
+    if (cleanText.length <= 5) {
+      return false;
+    }
+    
+    const mathKeywords = [
+      'sin', 'cos', 'tan', 'theta', 'calculate', 'solve', 'find area', 'find the',
+      'squared', 'power', 'equals', 'plus', 'minus', 'times', 'divided',
+      'derivative', 'integral', 'limit', 'equation', 'formula', 'root',
+      'triangle', 'rectangle', 'circle', 'square', 'geometry',
+      '+', '-', '×', '÷', '=', '^', '²', '³', 'π', '∞'
+    ];
+    
+    // Need at least 2 math indicators or very specific math terms
+    const mathMatches = mathKeywords.filter(keyword => cleanText.includes(keyword));
+    return mathMatches.length >= 1 && (cleanText.includes('what is') || cleanText.includes('calculate') || cleanText.includes('find') || cleanText.includes('area') || cleanText.includes('formula'));
+  };
+
+  const isConversationalQuery = (text) => {
+    const cleanText = text.toLowerCase().trim();
+    const conversationalKeywords = [
+      'hi', 'hello', 'hey', 'how are you', 'good morning', 'good evening',
+      'bye', 'goodbye', 'thanks', 'thank you', 'nice to meet you',
+      'how do you do', 'what\'s up', 'how\'s it going', 'see you later',
+      'hows it going', 'whats up', 'good day', 'greetings'
+    ];
+    
+    // Check for exact matches or very short greetings
+    if (cleanText.length <= 3 && (cleanText === 'hi' || cleanText === 'hey')) {
+      return true;
+    }
+    
+    return conversationalKeywords.some(keyword => cleanText.includes(keyword));
+  };
+
   const processMathematicalText = (text) => {
+    console.log('🎤 Original speech input:', text);
+    
+    // Don't process conversational text mathematically
+    if (isConversationalQuery(text)) {
+      console.log('✅ Detected as conversational, keeping original:', text);
+      return text;
+    }
+
+    // Only apply mathematical processing if it seems like a math question
+    if (!isMathematicalQuery(text)) {
+      console.log('✅ Not mathematical, keeping original:', text);
+      return text;
+    }
+
+    console.log('🧮 Applying mathematical processing to:', text);
+
     let processedText = text.toLowerCase();
     
-    // More comprehensive mathematical speech patterns and corrections
+    // Only essential mathematical corrections (removed aggressive ones)
     const mathCorrections = {
-      // Common misheard trigonometric functions
-      'sign': 'sin',
+      // Trigonometric functions (only when in math context)
       'sine': 'sin',
-      'sin of': 'sin',
-      'sign of': 'sin',
-      'coastline': 'cos',
-      'cosign': 'cos',
       'cosine': 'cos',
-      'cos of': 'cos',
-      'cause': 'cos',
-      'course': 'cos',
       'tangent': 'tan',
-      'tan of': 'tan',
-      'cotangent': 'cot',
-      'secant': 'sec',
-      'cosecant': 'csc',
       
       // Powers and exponents
       'squared': '²',
       'cubed': '³',
       'to the power of 2': '²',
       'to the power of 3': '³',
-      'power 2': '²',
-      'power 3': '³',
-      'power two': '²',
-      'power three': '³',
-      'raised to 2': '²',
-      'raised to the power 2': '²',
       
-      // Greek letters (common misheard)
+      // Only clear Greek letters (removed problematic ones)
       'theta': 'θ',
-      'beta': 'β',
-      'alpha': 'α',
-      'gamma': 'γ',
-      'delta': 'δ',
-      'lambda': 'λ',
       'pi': 'π',
-      'sigma': 'σ',
-      'omega': 'ω',
-      'phi': 'φ',
-      'data': 'θ', // Common mishearing
-      'theater': 'θ',
-      'feta': 'θ',
       
       // Mathematical operators
       'plus': '+',
-      'add': '+',
       'minus': '-',
-      'subtract': '-',
       'times': '×',
-      'multiply': '×',
       'divided by': '÷',
       'equals': '=',
-      'equal to': '=',
-      'not equal': '≠',
-      'less than or equal': '≤',
-      'greater than or equal': '≥',
-      
-      // Common mathematical terms that get misheard
-      'derivative': 'derivative',
-      'integral': 'integral',
-      'limit': 'limit',
-      'infinity': '∞',
-      'root': '√',
       'square root': '√',
-      
-      // Question starters
-      'what is': 'what is',
-      'find': 'find',
-      'calculate': 'calculate',
-      'solve': 'solve',
-      'evaluate': 'evaluate',
     };
     
-    // Apply corrections with word boundaries
+    // Apply corrections with word boundaries (only in mathematical context)
     Object.entries(mathCorrections).forEach(([wrong, correct]) => {
       const regex = new RegExp(`\\b${wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
       processedText = processedText.replace(regex, correct);
     });
     
-    // Handle specific mathematical expressions with more patterns
+    // Handle specific mathematical expressions
     processedText = processedText
-      // Fix sin squared patterns
       .replace(/sin\s*\^?\s*2/gi, 'sin²')
-      .replace(/sine\s*squared/gi, 'sin²')
-      .replace(/sign\s*squared/gi, 'sin²')
-      // Fix cos squared patterns  
       .replace(/cos\s*\^?\s*2/gi, 'cos²')
-      .replace(/cosine\s*squared/gi, 'cos²')
-      .replace(/cause\s*squared/gi, 'cos²')
-      // Fix variable squares
-      .replace(/\bx\s*\^?\s*2/gi, 'x²')
-      .replace(/\by\s*\^?\s*2/gi, 'y²')
-      .replace(/\bz\s*\^?\s*2/gi, 'z²')
-      // Fix theta patterns
-      .replace(/\bdata\b/gi, 'θ')
-      .replace(/\bfeta\b/gi, 'θ')
-      .replace(/\btheater\b/gi, 'θ')
-      // Clean up spacing
       .replace(/\s+/g, ' ')
       .trim();
     
@@ -566,12 +555,9 @@ function App() {
         setVoiceState('processing');
         const aiResponse = await getAIResponse(userInput);
         
-        // Add follow-up prompt to continue conversation
-        const responseWithPrompt = `${aiResponse}\n\nDo you have any other questions?`;
-        
-        // Speak the response
+        // Speak the response (AI already includes conversation-continuing questions)
         setVoiceState('speaking');
-        await playAIResponse(responseWithPrompt);
+        await playAIResponse(aiResponse);
         
         // Increment turn count
         setTurnCount(prev => prev + 1);
@@ -600,7 +586,10 @@ function App() {
 
   const getAIResponse = async (question) => {
     try {
-      console.log('Sending to AI:', question);
+      console.log('🚀 Sending to AI backend:', question);
+      console.log('📝 Question type - Conversational?', isConversationalQuery(question));
+      console.log('📝 Question type - Mathematical?', isMathematicalQuery(question));
+      
       const response = await fetch('http://localhost:8003/ask_question/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -616,7 +605,9 @@ function App() {
       }
       
       const data = await response.json();
+      console.log('📨 Received from AI backend:', data);
       const aiResponse = data.answer || 'I apologize, but I couldn\'t process that question properly.';
+      console.log('🤖 AI Response:', aiResponse);
       
       // Update conversation history
       const newEntry = { question: question, answer: aiResponse };

@@ -26,7 +26,7 @@ if (Test-Path $pythonPath) {
 
 # Function to start backend server
 function Start-Backend {
-    Write-Host "🔧 Starting Backend Server (FastAPI + MongoDB + GPT-5)..." -ForegroundColor Yellow
+    Write-Host "🔧 Starting Backend Server (FastAPI + MongoDB + GPT-4o)..." -ForegroundColor Yellow
     
     # Navigate to backend and start server
     Set-Location $backendPath
@@ -55,7 +55,7 @@ pause
         if ($healthData.status -eq "healthy") {
             Write-Host "✅ Backend Server Running: http://localhost:8003" -ForegroundColor Green
             Write-Host "✅ MongoDB: $($healthData.mongodb)" -ForegroundColor Green
-            Write-Host "✅ OpenAI GPT-5: $($healthData.openai)" -ForegroundColor Green
+            Write-Host "✅ OpenAI GPT-4o: $($healthData.openai)" -ForegroundColor Green
             return $true
         }
     } catch {

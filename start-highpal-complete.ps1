@@ -141,7 +141,7 @@ Write-Host "Health Check: http://localhost:8003/health" -ForegroundColor White
 Write-Host ""
 Write-Host "Your HighPal Educational AI Assistant is ready!" -ForegroundColor Yellow
 Write-Host "Features Available:" -ForegroundColor Cyan
-Write-Host "  - GPT-5 powered chat assistance" -ForegroundColor White
+Write-Host "  - GPT-4o powered chat assistance" -ForegroundColor White
 Write-Host "  - MongoDB Atlas document storage" -ForegroundColor White
 Write-Host "  - PDF document processing" -ForegroundColor White
 Write-Host "  - Semantic search capabilities" -ForegroundColor White

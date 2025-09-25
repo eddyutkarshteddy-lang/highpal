@@ -12,7 +12,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
 
   // Load conversation history from localStorage
   useEffect(() => {
-    const savedHistory = localStorage.getItem('highpal_gpt5_conversations');
+    const savedHistory = localStorage.getItem('highpal_gpt4o_conversations');
     if (savedHistory) {
       setConversationHistory(JSON.parse(savedHistory));
     }
@@ -20,7 +20,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
 
   // Save conversation history whenever it changes
   useEffect(() => {
-    localStorage.setItem('highpal_gpt5_conversations', JSON.stringify(conversationHistory));
+    localStorage.setItem('highpal_gpt4o_conversations', JSON.stringify(conversationHistory));
   }, [conversationHistory]);
 
   // Auto-scroll to bottom of chat
@@ -34,16 +34,16 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
     if (!question.trim()) return;
     
     setLoading(true);
-    setResponse('🤖 HighPal is thinking with GPT-5... Please wait');
+    setResponse('🤖 HighPal is thinking with GPT-4o... Please wait');
     
     // Create new conversation entry
     const newEntry = {
       id: Date.now(),
       question: question,
-      answer: '🤖 Processing with GPT-5...',
+      answer: '🤖 Processing with GPT-4o...',
       timestamp: new Date().toISOString(),
       user: user?.name || 'Anonymous',
-      model: 'gpt-5'
+      model: 'gpt-4o'
     };
     
     // Add to conversation history immediately
@@ -55,7 +55,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
         uploaded_files: uploadedFiles.map(f => f.id)
       };
 
-      const response = await fetch('http://localhost:8000/gpt5-chat', {
+      const response = await fetch('http://localhost:8003/gpt4o-chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,7 +66,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
 
       if (response.ok) {
         const data = await response.json();
-        const answerText = data.answer || 'No answer received from GPT-5';
+        const answerText = data.answer || 'No answer received from GPT-4o';
         
         setResponse(answerText);
         setModelInfo({
@@ -90,7 +90,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
         );
       } else {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || `GPT-5 service error: ${response.status}`;
+        const errorMessage = errorData.detail || `GPT-4o service error: ${response.status}`;
         setResponse(`❌ ${errorMessage}`);
         
         // Update conversation history with error
@@ -123,7 +123,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
   const clearHistory = () => {
     setConversationHistory([]);
     setResponse('');
-    localStorage.removeItem('highpal_gpt5_conversations');
+    localStorage.removeItem('highpal_gpt4o_conversations');
   };
 
   const formatTime = (timestamp) => {
@@ -133,7 +133,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
   return (
     <div className="gpt5-chat">
       <div className="chat-header">
-        <h2>🚀 HighPal GPT-5 Enhanced Chat</h2>
+        <h2>🚀 HighPal GPT-4o Enhanced Chat</h2>
         <div className="chat-controls">
           <button 
             onClick={() => setShowHistory(!showHistory)}
@@ -212,7 +212,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
             disabled={loading || !question.trim()}
             className="submit-button"
           >
-            {loading ? '🤖 Thinking...' : '🚀 Ask GPT-5'}
+            {loading ? '🤖 Thinking...' : '🚀 Ask GPT-4o'}
           </button>
         </div>
         
@@ -256,7 +256,7 @@ const GPT5Chat = ({ user, uploadedFiles = [] }) => {
 
       {/* Features Info */}
       <div className="features-info">
-        <h4>🌟 GPT-5 Enhanced Features</h4>
+        <h4>🌟 GPT-4o Enhanced Features</h4>
         <ul>
           <li>🧠 Advanced reasoning for complex academic problems</li>
           <li>🎯 Personalized explanations based on your learning style</li>
