@@ -354,9 +354,9 @@ async def gpt4o_enhanced_chat(request: QuestionRequest):
 CHAT MODE INSTRUCTIONS: Provide concise, direct responses optimized for text chat.
 
 MATH FORMATTING: Use simple, readable math notation. Avoid LaTeX backslashes:
-- Use "sin²θ + cos²θ" instead of \( \sin^2 \theta + \cos^2 \theta \)
-- Use "x²" instead of \( x^2 \)
-- Use "1/2" instead of \( \frac{1}{2} \)
+- Use "sin²θ + cos²θ" instead of \\( \\sin^2 \\theta + \\cos^2 \\theta \\)
+- Use "x²" instead of \\( x^2 \\)
+- Use "1/2" instead of \\( \\frac{1}{2} \\)
 - Keep math expressions clean and readable
 
 When the user greets you, match their energy and tone warmly:
@@ -511,9 +511,9 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
 VOICE MODE INSTRUCTIONS: Provide responses optimized for speech. Use natural, flowing language that sounds conversational when spoken aloud. NO parenthetical cues or tone instructions in your responses.
 
 MATH FORMATTING: Never use LaTeX notation or backslashes. Use plain text for all mathematical expressions:
-- Instead of \( \sin^2 \theta + \cos^2 \theta \), say "sine squared theta plus cosine squared theta"
-- Instead of \( x^2 \), say "x squared" 
-- Instead of \( \frac{1}{2} \), say "one half"
+- Instead of \\( \\sin^2 \\theta + \\cos^2 \\theta \\), say "sine squared theta plus cosine squared theta"
+- Instead of \\( x^2 \\), say "x squared" 
+- Instead of \\( \\frac{1}{2} \\), say "one half"
 - Keep all math expressions in simple, spoken language
 
 When the user greets you, match their energy and tone warmly:
@@ -601,9 +601,9 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
 VOICE MODE INSTRUCTIONS: Provide responses optimized for speech. Use natural, flowing language that sounds conversational when spoken aloud. NO parenthetical cues or tone instructions in your responses.
 
 MATH FORMATTING: Never use LaTeX notation or backslashes. Use plain text for all mathematical expressions:
-- Instead of \( \sin^2 \theta + \cos^2 \theta \), say "sine squared theta plus cosine squared theta"
-- Instead of \( x^2 \), say "x squared" 
-- Instead of \( \frac{1}{2} \), say "one half"
+- Instead of \\( \\sin^2 \\theta + \\cos^2 \\theta \\), say "sine squared theta plus cosine squared theta"
+- Instead of \\( x^2 \\), say "x squared" 
+- Instead of \\( \\frac{1}{2} \\), say "one half"
 - Keep all math expressions in simple, spoken language
 
 When the user greets you, match their energy and tone warmly:

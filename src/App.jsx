@@ -89,9 +89,17 @@ function App() {
   const azureSpeechConfig = {
     subscriptionKey: import.meta.env.VITE_AZURE_SPEECH_KEY,
     region: import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia",
-    voiceName: import.meta.env.VITE_AZURE_SPEECH_VOICE || "en-US-EmmaMultilingualNeural",
+    voiceName: "en-US-AriaNeural", // Force AriaNeural voice
     endpoint: `https://${import.meta.env.VITE_AZURE_SPEECH_REGION || "centralindia"}.tts.speech.microsoft.com/`
   };
+
+  // Debug logging for voice configuration
+  console.log('🎤 Azure Speech Config:', {
+    region: azureSpeechConfig.region,
+    voiceName: azureSpeechConfig.voiceName,
+    endpoint: azureSpeechConfig.endpoint,
+    hasKey: !!azureSpeechConfig.subscriptionKey
+  });
 
   // Smart Mathematical expression post-processing (only for math questions)
   const isMathematicalQuery = (text) => {
@@ -202,6 +210,25 @@ function App() {
     return endPhrases.some(phrase => text.toLowerCase().includes(phrase));
   };
 
+  // Barge-in functionality: Stop current audio when user starts talking
+  const stopCurrentAudio = () => {
+    console.log('🛑 Stopping current audio due to user speech');
+    
+    // Stop Azure Speech audio if playing
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      setCurrentAudio(null);
+      console.log('Stopped Azure Speech audio');
+    }
+    
+    // Stop browser speech synthesis if active
+    if (speechSynthesis.speaking) {
+      speechSynthesis.cancel();
+      console.log('Cancelled browser speech synthesis');
+    }
+  };
+
   const startContinuousListening = () => {
     return new Promise((resolve, reject) => {
       if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -231,6 +258,12 @@ function App() {
       recognition.onresult = (event) => {
         let interimTranscript = '';
         
+        // Check if user is starting to speak while AI is responding (barge-in detection)
+        if (voiceState === 'speaking' && event.results.length > 0) {
+          console.log('🛑 BARGE-IN DETECTED: User started speaking while AI was responding');
+          stopCurrentAudio();
+        }
+        
         // Process all results
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const transcript = event.results[i][0].transcript;
@@ -256,6 +289,12 @@ function App() {
           } else {
             interimTranscript += transcript;
             console.log('🎤 INTERIM:', interimTranscript);
+            
+            // Also check for barge-in on interim results for faster response
+            if (voiceState === 'speaking' && interimTranscript.trim().length > 2) {
+              console.log('🛑 INTERIM BARGE-IN: User interrupting with:', interimTranscript);
+              stopCurrentAudio();
+            }
           }
         }
       };
@@ -372,9 +411,12 @@ function App() {
   const playAIResponse = async (text) => {
     try {
       console.log('Playing AI response:', text);
+      console.log('🎤 Voice config:', azureSpeechConfig.voiceName);
+      console.log('🔑 Has Azure key:', !!azureSpeechConfig.subscriptionKey);
       
       // Try Azure Speech Service first
       try {
+        console.log('🎵 Attempting Azure Speech Service...');
         const response = await fetch(`${azureSpeechConfig.endpoint}cognitiveservices/v1`, {
           method: 'POST',
           headers: {
@@ -385,7 +427,7 @@ function App() {
           body: `
             <speak version='1.0' xml:lang='en-US'>
               <voice xml:lang='en-US' xml:gender='Female' name='${azureSpeechConfig.voiceName}'>
-                <prosody rate='0.9' pitch='medium'>
+                <prosody rate='1.0' pitch='medium'>
                   ${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
                 </prosody>
               </voice>
