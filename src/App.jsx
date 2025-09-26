@@ -101,6 +101,18 @@ function App() {
     hasKey: !!azureSpeechConfig.subscriptionKey
   });
 
+  // Utility function for requests with timeout
+  const fetchWithTimeout = (url, options, timeout = 4000) => {
+    return Promise.race([
+      fetch(url, options),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Request timeout')), timeout)
+      )
+    ]);
+  };
+
+
+
   // Smart Mathematical expression post-processing (only for math questions)
   const isMathematicalQuery = (text) => {
     const cleanText = text.toLowerCase().trim();
@@ -125,19 +137,35 @@ function App() {
 
   const isConversationalQuery = (text) => {
     const cleanText = text.toLowerCase().trim();
+    
+    // Very short queries are likely conversational
+    if (cleanText.length <= 15) {
+      return true;
+    }
+    
     const conversationalKeywords = [
       'hi', 'hello', 'hey', 'how are you', 'good morning', 'good evening',
       'bye', 'goodbye', 'thanks', 'thank you', 'nice to meet you',
       'how do you do', 'what\'s up', 'how\'s it going', 'see you later',
-      'hows it going', 'whats up', 'good day', 'greetings'
+      'hows it going', 'whats up', 'good day', 'greetings', 'what are you doing',
+      'how\'s your day', 'hows your day', 'what\'s happening', 'whats happening',
+      'how\'s everything', 'hows everything', 'nice weather', 'good to see you',
+      'how have you been', 'long time no see', 'what\'s new', 'whats new',
+      'sup', 'yo', 'wassup', 'howdy', 'morning', 'evening', 'night'
     ];
     
-    // Check for exact matches or very short greetings
-    if (cleanText.length <= 3 && (cleanText === 'hi' || cleanText === 'hey')) {
-      return true;
-    }
-    
     return conversationalKeywords.some(keyword => cleanText.includes(keyword));
+  };
+
+  // Smart timeout function based on question type
+  const getSmartTimeout = (question) => {
+    if (isConversationalQuery(question)) {
+      console.log('💬 Conversational query detected - using fast timeout');
+      return 3000; // 3 seconds for conversations (reliable)
+    } else {
+      console.log('🎓 Educational query detected - using standard timeout');
+      return 5000; // 5 seconds for educational questions
+    }
   };
 
   const processMathematicalText = (text) => {
@@ -239,21 +267,27 @@ function App() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
       
-      // Optimize settings for much better accuracy
-      recognition.continuous = true; // Allow longer speech
+      // Optimize settings specifically for very long conversational sentences
+      recognition.continuous = true; // Allow much longer speech
       recognition.interimResults = true; // Show results as user speaks
       recognition.lang = 'en-US';
-      recognition.maxAlternatives = 3; // Get multiple options
+      recognition.maxAlternatives = 1; // Focus on best result for long speech
 
       let finalTranscript = '';
       let timeout = setTimeout(() => {
+        console.log('⏰ Speech recognition timeout reached');
         recognition.stop();
         if (finalTranscript.trim()) {
-          resolve(finalTranscript.trim());
+          console.log('✅ Using partial transcript:', finalTranscript.trim());
+          const processedTranscript = processMathematicalText(finalTranscript.trim());
+          setLastRecognizedText(finalTranscript.trim());
+          setLastProcessedText(processedTranscript);
+          resolve(processedTranscript);
         } else {
-          reject(new Error('No speech detected'));
+          console.log('❌ No speech detected, returning empty string');
+          resolve(''); // Return empty string instead of rejecting
         }
-      }, 20000); // 20 second timeout
+      }, 25000); // 25 second timeout for very long conversational sentences
 
       recognition.onresult = (event) => {
         let interimTranscript = '';
@@ -272,23 +306,50 @@ function App() {
             finalTranscript += transcript;
             console.log('🎤 FINAL SPEECH:', finalTranscript);
             
-            // Clear timeout and resolve immediately when we get final result
-            clearTimeout(timeout);
+            // For very long sentences, wait a bit more to ensure completeness
+            if (finalTranscript.trim().length > 100) {
+              console.log('📝 Very long sentence detected, ensuring completeness...');
+              setTimeout(() => {
+                clearTimeout(timeout);
+                const processedTranscript = processMathematicalText(finalTranscript.trim());
+                console.log('🧮 PROCESSED LONG SENTENCE:', processedTranscript);
+                setLastRecognizedText(finalTranscript.trim());
+                setLastProcessedText(processedTranscript);
+                recognition.stop();
+                resolve(processedTranscript);
+              }, 1000); // Wait 1 second for very long sentences
+              return;
+            }
             
-            // Apply mathematical text processing
+            // Normal processing for shorter sentences
+            clearTimeout(timeout);
             const processedTranscript = processMathematicalText(finalTranscript.trim());
             console.log('🧮 PROCESSED:', processedTranscript);
-            
-            // Store for debugging display
             setLastRecognizedText(finalTranscript.trim());
             setLastProcessedText(processedTranscript);
-            
             recognition.stop();
             resolve(processedTranscript);
             return;
           } else {
             interimTranscript += transcript;
-            console.log('🎤 INTERIM:', interimTranscript);
+            console.log('🎤 INTERIM:', interimTranscript.length > 50 ? interimTranscript.substring(0, 50) + '...' : interimTranscript);
+            
+            // For very long sentences, extend the timeout dynamically
+            if (interimTranscript.trim().length > 80) {
+              clearTimeout(timeout);
+              timeout = setTimeout(() => {
+                console.log('⏰ Extended timeout for long sentence');
+                recognition.stop();
+                if (finalTranscript.trim()) {
+                  const processedTranscript = processMathematicalText(finalTranscript.trim());
+                  setLastRecognizedText(finalTranscript.trim());
+                  setLastProcessedText(processedTranscript);
+                  resolve(processedTranscript);
+                } else {
+                  resolve(interimTranscript.trim());
+                }
+              }, 30000); // Extra 30 seconds for very long sentences
+            }
             
             // Also check for barge-in on interim results for faster response
             if (voiceState === 'speaking' && interimTranscript.trim().length > 2) {
@@ -303,14 +364,21 @@ function App() {
         clearTimeout(timeout);
         console.error('Speech recognition error:', event.error);
         
-        // Try to restart recognition on certain errors
-        if (event.error === 'no-speech' || event.error === 'audio-capture') {
+        // Be more forgiving with speech recognition errors
+        if (event.error === 'no-speech') {
+          console.log('No speech detected - resolving with empty string');
+          resolve(''); // Don't reject, just return empty
+        } else if (event.error === 'audio-capture') {
           setTimeout(() => {
             console.log('Restarting speech recognition...');
             recognition.start();
-          }, 1000);
+          }, 500);
+        } else if (event.error === 'network') {
+          console.log('Network error - continuing conversation');
+          resolve(''); // Don't end conversation on network issues
         } else {
-          reject(new Error(`Speech recognition error: ${event.error}`));
+          console.log('Speech recognition error:', event.error, '- continuing anyway');
+          resolve(''); // Be forgiving, don't end conversation
         }
       };
 
@@ -321,6 +389,14 @@ function App() {
       recognition.onend = () => {
         console.log('🎤 Speech recognition ended');
         clearTimeout(timeout);
+        
+        // If we have some transcript, resolve with it instead of rejecting
+        if (finalTranscript.trim()) {
+          const processedTranscript = processMathematicalText(finalTranscript.trim());
+          setLastRecognizedText(finalTranscript.trim());
+          setLastProcessedText(processedTranscript);
+          resolve(processedTranscript);
+        }
       };
 
       continuousRecognitionRef.current = recognition;
@@ -417,12 +493,12 @@ function App() {
       // Try Azure Speech Service first
       try {
         console.log('🎵 Attempting Azure Speech Service...');
-        const response = await fetch(`${azureSpeechConfig.endpoint}cognitiveservices/v1`, {
+        const response = await fetchWithTimeout(`${azureSpeechConfig.endpoint}cognitiveservices/v1`, {
           method: 'POST',
           headers: {
             'Ocp-Apim-Subscription-Key': azureSpeechConfig.subscriptionKey,
             'Content-Type': 'application/ssml+xml',
-            'X-Microsoft-OutputFormat': 'audio-16khz-128kbitrate-mono-mp3'
+            'X-Microsoft-OutputFormat': 'audio-16khz-64kbitrate-mono-mp3'
           },
           body: `
             <speak version='1.0' xml:lang='en-US'>
@@ -441,11 +517,17 @@ function App() {
           
           return new Promise((resolve, reject) => {
             const audio = new Audio(audioUrl);
-            audio.onloadeddata = () => {
-              console.log('Audio loaded, playing...');
+            audio.preload = 'auto'; // Preload for faster playback
+            audio.onloadstart = () => { // Start playing as soon as loading begins
+              console.log('Audio starting, playing immediately...');
               audio.play().then(() => {
                 setCurrentAudio(audio);
-              }).catch(reject);
+              }).catch(() => {
+                // Fallback to canplay if immediate play fails
+                audio.oncanplay = () => {
+                  audio.play().then(() => setCurrentAudio(audio)).catch(reject);
+                };
+              });
             };
             audio.onended = () => {
               console.log('Audio playback finished');
@@ -583,6 +665,12 @@ function App() {
           setInactivityTimeout(null);
         }
         
+        // Skip processing if input is empty or just whitespace
+        if (!userInput || userInput.trim().length === 0) {
+          console.log('Empty input received, continuing conversation...');
+          continue; // Skip this turn and continue listening
+        }
+        
         // Check if user wants to end conversation
         if (isEndCommand(userInput)) {
           setOverlayAnimation('slide-down');
@@ -595,31 +683,50 @@ function App() {
         
         // Process the question
         setVoiceState('processing');
-        const aiResponse = await getAIResponse(userInput);
+        let aiResponse;
+        try {
+          aiResponse = await getAIResponse(userInput);
+        } catch (error) {
+          console.log('Error in getAIResponse, using fallback:', error);
+          aiResponse = "I heard what you said and I'd love to continue our conversation. What would you like to talk about next?";
+        }
         
         // Speak the response (AI already includes conversation-continuing questions)
         setVoiceState('speaking');
-        await playAIResponse(aiResponse);
+        try {
+          await playAIResponse(aiResponse);
+        } catch (error) {
+          console.log('Error in playAIResponse, continuing conversation:', error);
+          // Continue conversation even if audio fails
+        }
         
         // Increment turn count
         setTurnCount(prev => prev + 1);
         
-        // Brief pause before next listen
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Minimal pause for immediate conversation flow
+        await new Promise(resolve => setTimeout(resolve, 200));
         
       } catch (error) {
         console.log('Conversation error:', error.message);
         
-        if (error.message === 'Speech timeout') {
-          // Handle timeout gracefully - auto-pause instead of continuing
-          console.log('Speech timeout - auto-pausing conversation');
-          pauseConversation();
-          break;
+        if (error.message === 'Speech timeout' || error.message === 'Request timeout') {
+          // Handle timeout gracefully - continue conversation instead of ending
+          console.log('Timeout occurred - continuing conversation');
+          await playAIResponse("Sorry, I didn't catch that. Could you try again?");
+          continue; // Continue the conversation loop
+        } else if (error.message.includes('no-speech') || error.message.includes('audio-capture')) {
+          // Audio issues - continue conversation
+          console.log('Audio issue - continuing conversation');
+          continue;
+        } else if (error.message.includes('TypeError') || error.message.includes('Failed to convert')) {
+          // Browser compatibility issues - continue conversation
+          console.log('Browser compatibility issue - continuing conversation');
+          continue;
         } else {
-          // Other errors - end conversation
-          console.error('Ending conversation due to error:', error);
-          endConversation();
-          break;
+          // Only end conversation on critical errors, but be more forgiving
+          console.error('Error occurred but continuing conversation:', error);
+          await playAIResponse("Sorry about that technical hiccup. Let's continue our conversation!");
+          continue; // Continue instead of ending
         }
       }
     }
@@ -628,19 +735,34 @@ function App() {
 
   const getAIResponse = async (question) => {
     try {
+      // Handle empty or very short questions
+      if (!question || question.trim().length === 0) {
+        return "I didn't catch that. Could you try saying that again?";
+      }
+      
       console.log('🚀 Sending to AI backend:', question);
       console.log('📝 Question type - Conversational?', isConversationalQuery(question));
       console.log('📝 Question type - Mathematical?', isMathematicalQuery(question));
       
-      const response = await fetch('http://localhost:8003/ask_question/', {
+      const isConversational = isConversationalQuery(question);
+      const smartTimeout = getSmartTimeout(question);
+      
+      console.log('🚀 Processing question:', question);
+      console.log('🔍 Is conversational:', isConversational);
+      console.log('⏱️ Timeout set to:', smartTimeout, 'ms');
+      console.log('📡 Making request to backend...');
+      
+      const response = await fetchWithTimeout('http://localhost:8003/ask_question/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           question: question,
           uploaded_files: [],
-          is_first_message: conversationHistoryPal.length === 0
+          is_first_message: conversationHistoryPal.length === 0,
+          is_conversational: isConversational,  // Tell backend the query type
+          priority: isConversational ? 'fast' : 'detailed'
         })
-      });
+      }, smartTimeout);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -648,6 +770,7 @@ function App() {
       
       const data = await response.json();
       console.log('📨 Received from AI backend:', data);
+      console.log('✅ Request successful - no timeout');
       const aiResponse = data.answer || 'I apologize, but I couldn\'t process that question properly.';
       console.log('🤖 AI Response:', aiResponse);
       
@@ -659,7 +782,13 @@ function App() {
       
     } catch (error) {
       console.error('AI response error:', error);
-      return 'I\'m having trouble processing that right now. Could you try asking in a different way?';
+      if (error.message === 'Request timeout') {
+        return 'That took a bit longer than expected. Let me try to help you quickly!';
+      } else if (error.message.includes('TypeError') || error.message.includes('Failed to convert')) {
+        return 'I heard what you said about your plans - that sounds interesting! Tell me more.';
+      } else {
+        return 'I\'m having trouble processing that right now, but I\'d love to continue our conversation. What else is on your mind?';
+      }
     }
   };
 

@@ -95,6 +95,51 @@ class RevisionSubmission(BaseModel):
     revision_session_id: str
     answers: List[QuizAnswer]
 
+# Ultra-fast conversational query handler
+async def handle_fast_conversational_query(query: str):
+    """Ultra-fast processing for conversational queries"""
+    try:
+        if not OPENAI_AVAILABLE:
+            return {"question": query, "answer": "I'm here and ready to chat! How can I help you today?"}
+        
+        # Ultra-short conversational prompt for maximum speed
+        fast_prompt = """You are Pal, a friendly AI assistant. Give very brief, warm conversational responses. Keep it under 20 words and natural.
+
+Examples:
+"Hi" → "Hey there! How's your day going?"
+"How are you?" → "I'm doing great, thanks! How about you?"
+"What's up?" → "Not much, just here ready to help! What's on your mind?"
+"""
+        
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": fast_prompt},
+                {"role": "user", "content": query}
+            ],
+            max_completion_tokens=30,  # Ultra-short for maximum speed
+            temperature=0.9,  # Very decisive
+            top_p=0.8,  # Narrow focus
+            frequency_penalty=0.1  # Avoid repetition
+        )
+        
+        answer = response.choices[0].message.content
+        return {
+            "question": query,
+            "answer": answer,
+            "model": "gpt-4o-fast",
+            "processing_type": "conversational"
+        }
+        
+    except Exception as e:
+        logger.error(f"Fast conversational query error: {e}")
+        # Fallback response
+        return {
+            "question": query,
+            "answer": "Hey! I'm doing well, thanks for asking! How can I help you today?",
+            "processing_type": "fallback"
+        }
+
 def clean_response_formatting(text: str) -> str:
     """Clean up AI response formatting for better display"""
     import re
@@ -132,6 +177,8 @@ class QuestionRequest(BaseModel):
     question: str
     uploaded_files: list = []  # Optional list of uploaded file IDs
     is_first_message: bool = False  # Flag to track if this is the first message in conversation
+    is_conversational: bool = False  # Flag to indicate conversational vs educational query
+    priority: str = "detailed"  # "fast" for conversations, "detailed" for educational
 
 class TextToSpeechRequest(BaseModel):
     text: str
@@ -452,13 +499,27 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         if request and request.question:
             query = request.question
             uploaded_files = getattr(request, 'uploaded_files', [])
+            is_conversational = getattr(request, 'is_conversational', False)
+            priority = getattr(request, 'priority', 'detailed')
         else:
             # Accept both 'question' and 'q' parameters for GET requests
             query = question or q
             uploaded_files = []
+            is_conversational = False
+            priority = 'detailed'
             
         if not query:
             raise HTTPException(status_code=400, detail="Question parameter required")
+        
+        # Fast-track conversational queries with minimal processing
+        if is_conversational and priority == 'fast':
+            logger.info(f"🚀 Fast-track conversational query: {query}")
+            return await handle_fast_conversational_query(query)
+        
+        # Also fast-track very short queries (likely conversational)
+        if len(query.strip()) <= 15:
+            logger.info(f"⚡ Ultra-short query fast-track: {query}")
+            return await handle_fast_conversational_query(query)
         
         mongo = get_mongo_integration()
         if not mongo:
@@ -580,7 +641,9 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": query}
                         ],
-                        max_completion_tokens=400  # Reduced for more concise responses
+                        max_completion_tokens=150,  # Balanced for speed and quality
+                        temperature=0.7,  # Balanced responses
+                        top_p=0.9  # Focus on likely responses
                     )
                     raw_answer = response.choices[0].message.content
                     logger.info(f"GPT-4o raw response: {raw_answer[:200] if raw_answer else 'EMPTY'}...")
@@ -670,7 +733,9 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": query}
                         ],
-                        max_completion_tokens=400  # Reduced for more concise responses
+                        max_completion_tokens=180,  # Optimized for 2-second responses
+                        temperature=0.7,  # Balanced for quality and speed
+                        top_p=0.9  # Focus on most likely responses
                     )
                     answer = response.choices[0].message.content
                     answer = clean_response_formatting(answer)
