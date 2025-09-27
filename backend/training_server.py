@@ -96,14 +96,14 @@ class RevisionSubmission(BaseModel):
     answers: List[QuizAnswer]
 
 # Ultra-fast conversational query handler
-async def handle_fast_conversational_query(query: str):
-    """Ultra-fast processing for conversational queries"""
+async def handle_fast_conversational_query(query: str, conversation_history: list = []):
+    """Ultra-fast processing for conversational queries with context"""
     try:
         if not OPENAI_AVAILABLE:
             return {"question": query, "answer": "I'm here and ready to chat! How can I help you today?"}
         
         # Ultra-short conversational prompt for maximum speed
-        fast_prompt = """You are Pal, a friendly AI assistant. Give very brief, warm conversational responses. Keep it under 20 words and natural.
+        fast_prompt = """You are Pal, a friendly AI assistant. Give very brief, warm conversational responses. Keep it under 20 words and natural. Remember our conversation context.
 
 Examples:
 "Hi" → "Hey there! How's your day going?"
@@ -111,12 +111,20 @@ Examples:
 "What's up?" → "Not much, just here ready to help! What's on your mind?"
 """
         
+        # Build messages with conversation history for fast queries too
+        messages = [{"role": "system", "content": fast_prompt}]
+        
+        # Add last 2 exchanges for context in fast mode
+        for exchange in conversation_history[-2:]:
+            if exchange.get("question") and exchange.get("answer"):
+                messages.append({"role": "user", "content": exchange["question"]})
+                messages.append({"role": "assistant", "content": exchange["answer"]})
+        
+        messages.append({"role": "user", "content": query})
+        
         response = openai_client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": fast_prompt},
-                {"role": "user", "content": query}
-            ],
+            messages=messages,
             max_completion_tokens=30,  # Ultra-short for maximum speed
             temperature=0.9,  # Very decisive
             top_p=0.8,  # Narrow focus
@@ -179,6 +187,7 @@ class QuestionRequest(BaseModel):
     is_first_message: bool = False  # Flag to track if this is the first message in conversation
     is_conversational: bool = False  # Flag to indicate conversational vs educational query
     priority: str = "detailed"  # "fast" for conversations, "detailed" for educational
+    conversation_history: list = []  # Previous conversation exchanges for context
 
 class TextToSpeechRequest(BaseModel):
     text: str
@@ -501,12 +510,14 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             uploaded_files = getattr(request, 'uploaded_files', [])
             is_conversational = getattr(request, 'is_conversational', False)
             priority = getattr(request, 'priority', 'detailed')
+            conversation_history = getattr(request, 'conversation_history', [])
         else:
             # Accept both 'question' and 'q' parameters for GET requests
             query = question or q
             uploaded_files = []
             is_conversational = False
             priority = 'detailed'
+            conversation_history = []
             
         if not query:
             raise HTTPException(status_code=400, detail="Question parameter required")
@@ -514,12 +525,12 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         # Fast-track conversational queries with minimal processing
         if is_conversational and priority == 'fast':
             logger.info(f"🚀 Fast-track conversational query: {query}")
-            return await handle_fast_conversational_query(query)
+            return await handle_fast_conversational_query(query, conversation_history)
         
         # Also fast-track very short queries (likely conversational)
         if len(query.strip()) <= 15:
             logger.info(f"⚡ Ultra-short query fast-track: {query}")
-            return await handle_fast_conversational_query(query)
+            return await handle_fast_conversational_query(query, conversation_history)
         
         mongo = get_mongo_integration()
         if not mongo:
@@ -635,12 +646,23 @@ Pal: Oh no, I'm really sorry you're feeling this way. What happened today that's
 User: I'm stuck on this math problem.  
 Pal: You've got this—what part feels tricky right now? Let's break it down step by step together."""
                     
+                    # Build conversation messages with history for context
+                    messages = [{"role": "system", "content": system_prompt}]
+                    
+                    # Add conversation history for context
+                    for exchange in conversation_history[-3:]:  # Last 3 exchanges for context
+                        if exchange.get("question") and exchange.get("answer"):
+                            messages.append({"role": "user", "content": exchange["question"]})
+                            messages.append({"role": "assistant", "content": exchange["answer"]})
+                    
+                    # Add current question
+                    messages.append({"role": "user", "content": query})
+                    
+                    logger.info(f"🧠 Sending {len(messages)} messages to GPT-4o (including {len(conversation_history)} history exchanges)")
+                    
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",  # Using GPT-4o
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": query}
-                        ],
+                        messages=messages,
                         max_completion_tokens=150,  # Balanced for speed and quality
                         temperature=0.7,  # Balanced responses
                         top_p=0.9  # Focus on likely responses
@@ -727,12 +749,23 @@ Pal: Oh no, I'm really sorry you're feeling this way. What happened today that's
 User: I'm stuck on this math problem.  
 Pal: You've got this—what part feels tricky right now? Let's break it down step by step together."""
                     
+                    # Build conversation messages with history for context
+                    messages = [{"role": "system", "content": system_prompt}]
+                    
+                    # Add conversation history for context
+                    for exchange in conversation_history[-3:]:  # Last 3 exchanges for context
+                        if exchange.get("question") and exchange.get("answer"):
+                            messages.append({"role": "user", "content": exchange["question"]})
+                            messages.append({"role": "assistant", "content": exchange["answer"]})
+                    
+                    # Add current question
+                    messages.append({"role": "user", "content": query})
+                    
+                    logger.info(f"🧠 Sending {len(messages)} messages to GPT-4o (including {len(conversation_history)} history exchanges)")
+                    
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",  # Using GPT-4o
-                        messages=[
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": query}
-                        ],
+                        messages=messages,
                         max_completion_tokens=180,  # Optimized for 2-second responses
                         temperature=0.7,  # Balanced for quality and speed
                         top_p=0.9  # Focus on most likely responses

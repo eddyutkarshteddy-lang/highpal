@@ -3,6 +3,7 @@ import './App.css';
 import RevisionMode from './components/RevisionMode';
 
 function App() {
+  console.log('🚀 HighPal App component is rendering');
   const [currentView, setCurrentView] = useState('landing'); // 'landing', 'chat', 'revision'
   const [chatMode, setChatMode] = useState('pal'); // 'pal' or 'book'
   const [showDropdown, setShowDropdown] = useState(false);
@@ -56,7 +57,7 @@ function App() {
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
     try {
-      const response = await fetch('http://localhost:8003/list_documents/', {
+      const response = await fetch('http://localhost:8003/documents', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -84,6 +85,89 @@ function App() {
   useEffect(() => {
     loadExistingDocuments();
   }, []);
+
+  // Keyboard interrupt support (backup for barge-in)
+  useEffect(() => {
+    const handleKeyPress = (event) => {
+      // Press 'i' to interrupt while AI is speaking, or SPACEBAR for topic change
+      // ONLY work when AI is actively speaking - prevent accidental triggers
+      if ((event.key === 'i' || event.key === ' ') && 
+          isConversationActive && 
+          (voiceState === 'speaking' || currentAudio || speechSynthesis.speaking) &&
+          !event.target.matches('input, textarea, [contenteditable]')) { // Don't trigger in form fields
+        // Prevent default spacebar behavior (like scrolling or form submission)
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const isTopicChange = event.key === ' '; // Spacebar = topic change
+        const isCuriosityQuestion = event.key === 'i'; // 'i' = curiosity question
+        
+        if (isTopicChange) {
+          console.log('🎹 Topic change interrupt triggered (spacebar)');
+          console.log('🎯 Stopping AI to allow topic change...');
+        } else {
+          console.log('🎹 Curiosity question interrupt triggered (i key)');
+          console.log('🤔 Stopping AI to allow curiosity question...');
+        }
+        
+        killAllAudio();
+        setVoiceState('listening');
+        
+        // Start listening based on interrupt type
+        setTimeout(async () => {
+          try {
+            if (isTopicChange) {
+              console.log('🎤 Listening for your new topic...');
+            } else {
+              console.log('🎤 Listening for your curiosity question...');
+            }
+            
+            const userInput = await startContinuousListening();
+            
+            if (userInput && userInput.trim().length > 0) {
+              if (isTopicChange) {
+                console.log('✅ New topic:', userInput);
+                // For topic change, send as new conversation
+                setVoiceState('processing');
+                const aiResponse = await getAIResponse(userInput);
+                setVoiceState('speaking');
+                await playAIResponse(aiResponse);
+              } else {
+                console.log('✅ Curiosity question:', userInput);
+                
+                // Get the last topic from conversation history for better context
+                const lastTopic = conversationHistoryPal.length > 0 ? 
+                  conversationHistoryPal[conversationHistoryPal.length - 1].question : '';
+                
+                // For curiosity, maintain explicit context about what we were discussing
+                const contextualInput = lastTopic ? 
+                  `We were just discussing "${lastTopic}". I have a related question: ${userInput}` :
+                  `I have a quick question out of curiosity: ${userInput}`;
+                
+                console.log('🧠 Sending with context:', contextualInput);
+                setVoiceState('processing');
+                const aiResponse = await getAIResponse(contextualInput);
+                setVoiceState('speaking');
+                await playAIResponse(aiResponse);
+              }
+            } else {
+              console.log('ℹ️ No input detected, continuing conversation...');
+              setVoiceState('listening');
+            }
+          } catch (error) {
+            console.log('Error with interrupt:', error);
+            setVoiceState('listening');
+          }
+        }, 200);
+      }
+    };
+
+    // Only add listener when conversation is active
+    if (isConversationActive) {
+      window.addEventListener('keydown', handleKeyPress, true); // Use capture phase
+      return () => window.removeEventListener('keydown', handleKeyPress, true);
+    }
+  }, [voiceState, currentAudio]);
 
   // Azure Speech Service configuration from environment variables
   const azureSpeechConfig = {
@@ -238,23 +322,237 @@ function App() {
     return endPhrases.some(phrase => text.toLowerCase().includes(phrase));
   };
 
-  // Barge-in functionality: Stop current audio when user starts talking
-  const stopCurrentAudio = () => {
-    console.log('🛑 Stopping current audio due to user speech');
+  // Nuclear option: Stop ALL audio immediately
+  const killAllAudio = () => {
+    console.log('� NUCLEAR AUDIO STOP - Killing everything!');
     
-    // Stop Azure Speech audio if playing
+    // Multiple attempts to stop current audio
     if (currentAudio) {
-      currentAudio.pause();
-      currentAudio.currentTime = 0;
-      setCurrentAudio(null);
-      console.log('Stopped Azure Speech audio');
+      try {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio.src = '';
+        currentAudio.load();
+        currentAudio.volume = 0; // Mute as backup
+        setCurrentAudio(null);
+        console.log('✅ Nuclear stopped Azure audio');
+      } catch (e) {
+        console.log('Error in nuclear Azure stop:', e);
+      }
     }
     
-    // Stop browser speech synthesis if active
-    if (speechSynthesis.speaking) {
+    // Multiple attempts to stop speech synthesis
+    try {
       speechSynthesis.cancel();
-      console.log('Cancelled browser speech synthesis');
+      speechSynthesis.pause();
+      // Try multiple times for stubborn browsers
+      setTimeout(() => speechSynthesis.cancel(), 10);
+      setTimeout(() => speechSynthesis.cancel(), 50);
+      console.log('✅ Nuclear stopped speech synthesis');
+    } catch (e) {
+      console.log('Error in nuclear speech stop:', e);
     }
+    
+    // Stop ALL audio elements on the page
+    try {
+      document.querySelectorAll('audio, video').forEach(element => {
+        element.pause();
+        element.currentTime = 0;
+        element.volume = 0;
+        element.src = '';
+        console.log('✅ Nuclear stopped media element');
+      });
+    } catch (e) {
+      console.log('Error stopping media elements:', e);
+    }
+    
+    // Try to stop Web Audio API contexts
+    try {
+      if (window.AudioContext || window.webkitAudioContext) {
+        // This is a more aggressive approach
+        console.log('Attempting Web Audio API suspension');
+      }
+    } catch (e) {
+      console.log('No Web Audio to stop');
+    }
+  };
+
+  // Enhanced audio stopping functionality
+  const stopCurrentAudio = () => {
+    console.log('🛑 FORCE STOPPING all audio due to barge-in');
+    
+    // Use nuclear option first
+    killAllAudio();
+    
+    // Immediately switch to listening state after interruption
+    setVoiceState('listening');
+    console.log('🎤 Voice state set to listening after barge-in');
+  };
+
+  // Simplified barge-in detection using audio level monitoring
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneRef = useRef(null);
+  const bargeInDetectedRef = useRef(false);
+  const audioMonitoringRef = useRef(false);
+  const lastInterruptionTime = useRef(0);
+
+  // Start simple audio level monitoring for barge-in
+  const startBargeInDetection = () => {
+    if (audioMonitoringRef.current) {
+      console.log('Barge-in detection already running');
+      return;
+    }
+
+    console.log('🎙️ Starting simplified barge-in detection...');
+    
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        console.log('✅ Got microphone access for barge-in');
+        audioMonitoringRef.current = true;
+        
+        // Create audio context and analyser
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(stream);
+        
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+        microphoneRef.current = microphone;
+        
+        microphone.connect(analyser);
+        analyser.fftSize = 256;
+        
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        // Monitor audio levels
+        const checkAudioLevel = () => {
+          if (!audioMonitoringRef.current) {
+            console.log('⏹️ Audio monitoring stopped');
+            return;
+          }
+          
+          // SIMPLIFIED: Only pause detection if explicitly in listening mode with no audio
+          if (voiceState === 'listening' && !currentAudio && !speechSynthesis.speaking) {
+            // Still monitor but don't interrupt during user speech
+            requestAnimationFrame(checkAudioLevel);
+            return;
+          }
+          
+          console.log('🔊 Current voice state:', voiceState);
+          
+          analyser.getByteFrequencyData(dataArray);
+          
+          // Calculate average volume
+          let sum = 0;
+          for (let i = 0; i < bufferLength; i++) {
+            sum += dataArray[i];
+          }
+          const average = sum / bufferLength;
+          
+          // If we detect significant audio while AI is speaking, trigger barge-in
+          // Always log audio levels for debugging  
+          console.log('🎤 Audio level:', Math.round(average), '| Voice state:', voiceState, '| Audio:', !!currentAudio, '| Speech:', speechSynthesis.speaking);
+          
+          // Simple and aggressive - interrupt on ANY sound above 1
+          const isAudioPlaying = currentAudio && !currentAudio.paused;
+          const isSpeechActive = speechSynthesis.speaking;
+          
+          // Trigger interruption if there's any AI activity OR just any sound at all
+          const shouldDetectBarge = isAudioPlaying || isSpeechActive || voiceState === 'speaking' || true; // Always allow interruption
+          
+          // EMERGENCY AGGRESSIVE interruption - interrupt on ANY significant sound
+          const now = Date.now();
+          const timeSinceLastInterruption = now - lastInterruptionTime.current;
+          const cooldownPeriod = 500; // Very short cooldown
+          
+          // ULTRA SIMPLE: If sound is detected and any audio might be playing, INTERRUPT
+          if (average > 0.2 && timeSinceLastInterruption > cooldownPeriod && 
+              (currentAudio || speechSynthesis.speaking || voiceState === 'speaking')) {
+            
+            console.log('💥 EMERGENCY INTERRUPT! Audio level:', Math.round(average));
+            console.log('🚨 Conditions: Audio=', !!currentAudio, 'Speech=', speechSynthesis.speaking, 'State=', voiceState);
+            console.log('� VOICE INTERRUPTION! Level:', Math.round(average));
+            console.log('� BARGE-IN DETECTED: Audio level:', average);
+            // Set cooldown to prevent rapid re-triggering
+            lastInterruptionTime.current = now;
+            bargeInDetectedRef.current = true;
+            
+            // IMMEDIATELY kill all audio to prevent overlap
+            killAllAudio();
+            stopBargeInDetection();
+            
+
+            setVoiceState('listening');
+            
+            // Wait for audio to fully stop, then capture user's interruption
+            setTimeout(async () => {
+              try {
+
+                const userInput = await startContinuousListening();
+                
+                if (userInput && userInput.trim().length > 0) {
+                  console.log('✅ Processing interruption:', userInput);
+                  setVoiceState('processing');
+                  const aiResponse = await getAIResponse(userInput);
+                  
+                  setVoiceState('speaking');
+                  await playAIResponse(aiResponse);
+                }
+                
+                bargeInDetectedRef.current = false;
+                setVoiceState('listening');
+              } catch (error) {
+                console.log('Error processing interruption:', error);
+                bargeInDetectedRef.current = false;
+                setVoiceState('listening');
+              }
+            }, 300); // Increased delay to ensure audio stops
+            
+            return;
+          }
+          
+
+          
+          // Continue monitoring
+          requestAnimationFrame(checkAudioLevel);
+        };
+        
+        console.log('🔊 Starting audio level monitoring loop...');
+        checkAudioLevel();
+        
+      })
+      .catch(error => {
+        console.log('❌ Could not start barge-in detection:', error.message);
+        audioMonitoringRef.current = false;
+      });
+  };
+
+  // Stop barge-in detection
+  const stopBargeInDetection = () => {
+    console.log('🛑 Stopping barge-in detection');
+    audioMonitoringRef.current = false;
+    
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      } catch (e) {
+        console.log('Error closing audio context:', e);
+      }
+    }
+    
+    if (microphoneRef.current) {
+      try {
+        microphoneRef.current.disconnect();
+        microphoneRef.current = null;
+      } catch (e) {
+        console.log('Error disconnecting microphone:', e);
+      }
+    }
+    
+    analyserRef.current = null;
   };
 
   const startContinuousListening = () => {
@@ -291,12 +589,6 @@ function App() {
 
       recognition.onresult = (event) => {
         let interimTranscript = '';
-        
-        // Check if user is starting to speak while AI is responding (barge-in detection)
-        if (voiceState === 'speaking' && event.results.length > 0) {
-          console.log('🛑 BARGE-IN DETECTED: User started speaking while AI was responding');
-          stopCurrentAudio();
-        }
         
         // Process all results
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -487,8 +779,25 @@ function App() {
   const playAIResponse = async (text) => {
     try {
       console.log('Playing AI response:', text);
+      
+      // PREVENT OVERLAPPING: Stop any existing audio first
+      if (currentAudio || speechSynthesis.speaking) {
+        console.log('🛑 Stopping existing audio to prevent overlap');
+        killAllAudio();
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait for stop
+      }
+      
       console.log('🎤 Voice config:', azureSpeechConfig.voiceName);
       console.log('🔑 Has Azure key:', !!azureSpeechConfig.subscriptionKey);
+      
+      // Set voice state to speaking BEFORE starting audio
+      setVoiceState('speaking');
+      
+      // Reset barge-in flag before starting
+      bargeInDetectedRef.current = false;
+      
+      // Start simplified barge-in detection immediately
+      startBargeInDetection();
       
       // Try Azure Speech Service first
       try {
@@ -519,9 +828,16 @@ function App() {
             const audio = new Audio(audioUrl);
             audio.preload = 'auto'; // Preload for faster playback
             audio.onloadstart = () => { // Start playing as soon as loading begins
-              console.log('Audio starting, playing immediately...');
+              console.log('🎧 Audio loading - starting barge-in detection');
+              
+              // Ensure barge-in detection is active when audio starts
+              if (!audioMonitoringRef.current) {
+                startBargeInDetection();
+              }
+              
               audio.play().then(() => {
                 setCurrentAudio(audio);
+                console.log('🔊 Azure audio playing - detection active');
               }).catch(() => {
                 // Fallback to canplay if immediate play fails
                 audio.oncanplay = () => {
@@ -533,11 +849,15 @@ function App() {
               console.log('Audio playback finished');
               URL.revokeObjectURL(audioUrl);
               setCurrentAudio(null);
+              // Stop barge-in detection when audio ends
+              stopBargeInDetection();
               resolve();
             };
             audio.onerror = (error) => {
               console.error('Audio playback error:', error);
               URL.revokeObjectURL(audioUrl);
+              // Stop barge-in detection on error
+              stopBargeInDetection();
               reject(error);
             };
           });
@@ -567,12 +887,25 @@ function App() {
               utterance.voice = femaleVoice;
             }
             
+            utterance.onstart = () => {
+              console.log('🔊 Browser speech started - ensuring barge-in detection');
+              
+              // Ensure barge-in detection is active for browser speech
+              if (!audioMonitoringRef.current) {
+                startBargeInDetection();
+              }
+            };
+            
             utterance.onend = () => {
               console.log('Browser speech finished');
+              // Stop barge-in detection when speech ends
+              stopBargeInDetection();
               resolve();
             };
             utterance.onerror = (error) => {
               console.error('Browser speech error:', error);
+              // Stop barge-in detection on error
+              stopBargeInDetection();
               reject(error);
             };
             
@@ -584,6 +917,8 @@ function App() {
       }
     } catch (error) {
       console.error('Error playing AI response:', error);
+      // Stop barge-in detection on any error
+      stopBargeInDetection();
       throw error;
     }
   };
@@ -647,6 +982,12 @@ function App() {
         if (!conversationActiveRef.current || conversationPausedRef.current) {
           console.log('Conversation was ended or paused, breaking loop');
           break;
+        }
+        
+        // Check if a barge-in was detected
+        if (bargeInDetectedRef.current) {
+          console.log('Barge-in detected, resetting flag and continuing...');
+          bargeInDetectedRef.current = false;
         }
         
         setVoiceState('listening');
@@ -750,6 +1091,7 @@ function App() {
       console.log('🚀 Processing question:', question);
       console.log('🔍 Is conversational:', isConversational);
       console.log('⏱️ Timeout set to:', smartTimeout, 'ms');
+      console.log('🧠 Conversation history being sent:', conversationHistoryPal.slice(-5));
       console.log('📡 Making request to backend...');
       
       const response = await fetchWithTimeout('http://localhost:8003/ask_question/', {
@@ -760,7 +1102,8 @@ function App() {
           uploaded_files: [],
           is_first_message: conversationHistoryPal.length === 0,
           is_conversational: isConversational,  // Tell backend the query type
-          priority: isConversational ? 'fast' : 'detailed'
+          priority: isConversational ? 'fast' : 'detailed',
+          conversation_history: conversationHistoryPal.slice(-5) // Send last 5 exchanges for context
         })
       }, smartTimeout);
       
@@ -1007,7 +1350,7 @@ function App() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('http://localhost:8003/upload_pdf/', {
+        const response = await fetch('http://localhost:8003/upload', {
           method: 'POST',
           body: formData,
         });
@@ -1092,6 +1435,11 @@ function App() {
   // Chat Interface - now uses separate histories and shows upload for book mode first
   return (
     <div style={{ minHeight: '100vh', width: '100vw', background: 'radial-gradient(circle at 10% 10%, #f6f8fc 0%, #fff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, Helvetica, sans-serif', paddingTop: '40px', position: 'relative' }}>
+      
+      {/* Debug test element */}
+      <div style={{ position: 'fixed', top: '10px', left: '10px', background: 'red', color: 'white', padding: '10px', zIndex: 9999 }}>
+        HighPal App Loaded - View: {currentView}
+      </div>
       
       {/* Back arrow */}
       <button 
