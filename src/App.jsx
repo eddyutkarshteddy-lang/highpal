@@ -18,9 +18,47 @@ function App() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [loginLoading, setLoginLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState([]);
+  
   const [conversationHistoryPal, setConversationHistoryPal] = useState([]);
   const [conversationHistoryBook, setConversationHistoryBook] = useState([]);
   const [showConversation, setShowConversation] = useState(false);
+  
+  // Saved conversations (talks) state - initialize with stored talks
+  const [savedTalks, setSavedTalks] = useState(() => {
+    try {
+      const stored = localStorage.getItem('highpal_saved_talks');
+      if (!stored) return [];
+      
+      const talks = JSON.parse(stored);
+      
+      // Remove duplicates based on title and complete history content
+      const uniqueTalks = [];
+      const seen = new Set();
+      
+      for (const talk of talks) {
+        // Create a more comprehensive key for duplicate detection
+        const historyKey = JSON.stringify(talk.history);
+        const key = `${talk.title}-${historyKey}`;
+        
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueTalks.push(talk);
+        }
+      }
+      
+      // If we removed duplicates, save the cleaned version
+      if (uniqueTalks.length !== talks.length) {
+        localStorage.setItem('highpal_saved_talks', JSON.stringify(uniqueTalks));
+      }
+      
+      return uniqueTalks;
+    } catch (e) {
+      console.log('Could not load saved talks on init:', e);
+      return [];
+    }
+  });
+  const [currentTalkId, setCurrentTalkId] = useState(null);
+  const [showTalksSidebar, setShowTalksSidebar] = useState(true);
   const [sampleMode, setSampleMode] = useState(true);
   const [conversationFlow, setConversationFlow] = useState('idle');
   const [transcribedText, setTranscribedText] = useState('');
@@ -53,6 +91,151 @@ function App() {
   const [overlayAnimation, setOverlayAnimation] = useState('slide-up');
   const [lastRecognizedText, setLastRecognizedText] = useState('');
   const [lastProcessedText, setLastProcessedText] = useState('');
+
+  // Load saved talks from localStorage
+  const loadSavedTalks = () => {
+    try {
+      const stored = localStorage.getItem('highpal_saved_talks');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.log('Could not load saved talks:', e);
+      return [];
+    }
+  };
+
+  // Save talks to localStorage
+  const saveTalksToStorage = (talks) => {
+    try {
+      localStorage.setItem('highpal_saved_talks', JSON.stringify(talks));
+    } catch (e) {
+      console.log('Could not save talks:', e);
+    }
+  };
+
+
+
+  // Generate conversation title from first question
+  const generateTalkTitle = (conversationHistory) => {
+    if (conversationHistory.length === 0) return 'New Chat';
+    const firstQuestion = conversationHistory[0].question;
+    if (firstQuestion.length > 30) {
+      return firstQuestion.substring(0, 30) + '...';
+    }
+    return firstQuestion;
+  };
+
+  // Save current conversation as a talk
+  const saveCurrentTalk = () => {
+    const currentHistory = chatMode === 'pal' ? conversationHistoryPal : conversationHistoryBook;
+    if (currentHistory.length === 0) return;
+
+    const talkId = currentTalkId || Date.now().toString();
+    
+    // Check if this conversation already exists and is identical
+    const existingTalk = savedTalks.find(talk => talk.id === talkId);
+    if (existingTalk && JSON.stringify(existingTalk.history) === JSON.stringify(currentHistory)) {
+      // No changes, don't save
+      return;
+    }
+    
+    const title = generateTalkTitle(currentHistory);
+    
+    const newTalk = {
+      id: talkId,
+      title: title,
+      mode: chatMode,
+      history: [...currentHistory],
+      createdAt: existingTalk ? existingTalk.createdAt : new Date().toISOString(),
+      lastModified: new Date().toISOString()
+    };
+
+    const updatedTalks = savedTalks.filter(talk => talk.id !== talkId);
+    updatedTalks.unshift(newTalk);
+    
+    setSavedTalks(updatedTalks);
+    saveTalksToStorage(updatedTalks);
+    setCurrentTalkId(talkId);
+  };
+
+  // Start a new chat
+  const startNewChat = () => {
+    // Save current conversation if it has content
+    saveCurrentTalk();
+    
+    // Clear current conversation
+    if (chatMode === 'pal') {
+      setConversationHistoryPal([]);
+    } else {
+      setConversationHistoryBook([]);
+    }
+    setCurrentTalkId(null);
+  };
+
+  // Load a saved talk
+  const loadTalk = (talk) => {
+    // Save current conversation first if it has content and it's different from the one we're loading
+    if (currentTalkId !== talk.id) {
+      saveCurrentTalk();
+    }
+
+    // Load the selected talk
+    setChatMode(talk.mode);
+    if (talk.mode === 'pal') {
+      setConversationHistoryPal(talk.history);
+    } else {
+      setConversationHistoryBook(talk.history);
+    }
+    setCurrentTalkId(talk.id);
+  };
+
+  // Delete a talk
+  const deleteTalk = (talkId) => {
+    const updatedTalks = savedTalks.filter(talk => talk.id !== talkId);
+    setSavedTalks(updatedTalks);
+    saveTalksToStorage(updatedTalks);
+    
+    // If we're deleting the current talk, clear the conversation
+    if (currentTalkId === talkId) {
+      if (chatMode === 'pal') {
+        setConversationHistoryPal([]);
+      } else {
+        setConversationHistoryBook([]);
+      }
+      setCurrentTalkId(null);
+    }
+  };
+
+  // Track if we're on initial load to prevent auto-save on restore
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  
+  useEffect(() => {
+    // Set initial load to false after component mounts
+    const timer = setTimeout(() => setIsInitialLoad(false), 1000);
+    
+    // Clean up old localStorage system
+    try {
+      localStorage.removeItem('highpal_conversation_history');
+    } catch (e) {
+      console.log('Could not clean old storage:', e);
+    }
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Auto-save current conversation when it changes (but not on initial load)
+  useEffect(() => {
+    if (!isInitialLoad && conversationHistoryPal.length > 0 && chatMode === 'pal') {
+      const timeoutId = setTimeout(() => saveCurrentTalk(), 2000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [conversationHistoryPal, isInitialLoad]);
+
+  useEffect(() => {
+    if (!isInitialLoad && conversationHistoryBook.length > 0 && chatMode === 'book') {
+      const timeoutId = setTimeout(() => saveCurrentTalk(), 2000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [conversationHistoryBook, isInitialLoad]);
 
   // Load existing documents from MongoDB on app start
   const loadExistingDocuments = async () => {
@@ -135,18 +318,11 @@ function App() {
               } else {
                 console.log('✅ Curiosity question:', userInput);
                 
-                // Get the last topic from conversation history for better context
-                const lastTopic = conversationHistoryPal.length > 0 ? 
-                  conversationHistoryPal[conversationHistoryPal.length - 1].question : '';
-                
-                // For curiosity, maintain explicit context about what we were discussing
-                const contextualInput = lastTopic ? 
-                  `We were just discussing "${lastTopic}". I have a related question: ${userInput}` :
-                  `I have a quick question out of curiosity: ${userInput}`;
-                
-                console.log('🧠 Sending with context:', contextualInput);
+                // SIMPLE APPROACH: Just send the question directly
+                // The backend now has conversation history, so it should maintain context automatically
+                console.log('🧠 Sending curiosity question directly (backend will maintain context)');
                 setVoiceState('processing');
-                const aiResponse = await getAIResponse(contextualInput);
+                const aiResponse = await getAIResponse(userInput);
                 setVoiceState('speaking');
                 await playAIResponse(aiResponse);
               }
@@ -1094,6 +1270,11 @@ function App() {
       console.log('🧠 Conversation history being sent:', conversationHistoryPal.slice(-5));
       console.log('📡 Making request to backend...');
       
+      // IMPORTANT: Add question to history BEFORE sending request
+      // This ensures the question is preserved even if the response is interrupted
+      const tempHistoryEntry = { question: question, answer: '...' };
+      setConversationHistoryPal(prev => [...prev, tempHistoryEntry]);
+      
       const response = await fetchWithTimeout('http://localhost:8003/ask_question/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1117,9 +1298,29 @@ function App() {
       const aiResponse = data.answer || 'I apologize, but I couldn\'t process that question properly.';
       console.log('🤖 AI Response:', aiResponse);
       
-      // Update conversation history
-      const newEntry = { question: question, answer: aiResponse };
-      setConversationHistoryPal(prev => [...prev, newEntry]);
+      // Update conversation history with actual response (replace the temporary entry)
+      setConversationHistoryPal(prev => {
+        const updated = [...prev];
+        if (updated.length > 0 && updated[updated.length - 1].answer === '...') {
+          // Replace the temporary entry with the actual response
+          updated[updated.length - 1] = { question: question, answer: aiResponse };
+        } else {
+          // Fallback: add new entry if temp entry not found
+          updated.push({ question: question, answer: aiResponse });
+        }
+        
+        // DEBUG: Log the updated history
+        console.log('🧠 Updated conversation history:', updated);
+        
+        // Persist to localStorage as backup
+        try {
+          localStorage.setItem('highpal_conversation_history', JSON.stringify(updated.slice(-10)));
+        } catch (e) {
+          console.log('Could not save to localStorage:', e);
+        }
+        
+        return updated;
+      });
       
       return aiResponse;
       
@@ -1434,12 +1635,139 @@ function App() {
 
   // Chat Interface - now uses separate histories and shows upload for book mode first
   return (
-    <div style={{ minHeight: '100vh', width: '100vw', background: 'radial-gradient(circle at 10% 10%, #f6f8fc 0%, #fff 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, Arial, Helvetica, sans-serif', paddingTop: '40px', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', width: '100vw', background: 'radial-gradient(circle at 10% 10%, #f6f8fc 0%, #fff 100%)', display: 'flex', fontFamily: 'Inter, Arial, Helvetica, sans-serif', position: 'relative' }}>
       
-      {/* Debug test element */}
-      <div style={{ position: 'fixed', top: '10px', left: '10px', background: 'red', color: 'white', padding: '10px', zIndex: 9999 }}>
-        HighPal App Loaded - View: {currentView}
+      {/* Talks Sidebar */}
+      <div style={{ width: '300px', background: 'rgba(255,255,255,0.95)', borderRight: '1px solid #e1e5e9', height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {/* Sidebar Header */}
+        <div style={{ padding: '20px', borderBottom: '1px solid #e1e5e9' }}>
+          <h2 style={{ margin: '0', fontSize: '1.5rem', color: '#181c2a', fontWeight: '700' }}>Talks</h2>
+          <button 
+            onClick={startNewChat}
+            style={{
+              marginTop: '12px',
+              width: '100%',
+              padding: '12px 16px',
+              background: 'linear-gradient(135deg, #7c4afd, #a084fa)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              fontWeight: '600',
+              boxShadow: '0 2px 8px rgba(124, 74, 253, 0.3)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            + New Chat
+          </button>
+        </div>
+        
+        {/* Talks List */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
+          {savedTalks.length === 0 ? (
+            <div style={{ padding: '20px', textAlign: 'center', color: '#666', fontSize: '0.9rem' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '8px' }}>💬</div>
+              No conversations yet.<br/>Start chatting to create your first talk!
+            </div>
+          ) : (
+            savedTalks.map((talk) => (
+              <div 
+                key={talk.id}
+                onClick={() => loadTalk(talk)}
+                style={{
+                  padding: '12px',
+                  margin: '4px 0',
+                  background: currentTalkId === talk.id ? '#f0f0ff' : 'white',
+                  border: currentTalkId === talk.id ? '2px solid #7c4afd' : '1px solid #e1e5e9',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                  position: 'relative',
+                }}
+                onMouseEnter={(e) => {
+                  if (currentTalkId !== talk.id) {
+                    e.target.style.background = '#f8f9fa';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentTalkId !== talk.id) {
+                    e.target.style.background = 'white';
+                  }
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#181c2a', marginBottom: '4px', lineHeight: '1.3' }}>
+                      {talk.title}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#666', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{talk.mode === 'pal' ? '🎓' : '📚'}</span>
+                      <span>{new Date(talk.lastModified).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span>{talk.history.length} messages</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteTalk(talk.id);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#999',
+                      cursor: 'pointer',
+                      padding: '6px',
+                      borderRadius: '6px',
+                      marginLeft: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '28px',
+                      height: '28px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.color = '#dc3545';
+                      e.target.style.background = '#ffebee';
+                      e.target.style.transform = 'scale(1.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.color = '#999';
+                      e.target.style.background = 'none';
+                      e.target.style.transform = 'scale(1)';
+                    }}
+                    title="Delete conversation"
+                  >
+                    <svg 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="3,6 5,6 21,6"></polyline>
+                      <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
+
+      {/* Main Content Area */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: '40px', position: 'relative' }}>
+      
+
+
       
       {/* Back arrow */}
       <button 
@@ -1673,6 +2001,8 @@ function App() {
         </div>
       )}
       
+      </div> {/* Close Main Content Area */}
+      
       {/* Voice Conversation Overlay */}
       {showVoiceOverlay && (
         <div 
@@ -1881,6 +2211,7 @@ function App() {
           )}
         </div>
       )}
+      
     </div>
   );
 }
