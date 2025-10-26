@@ -14,6 +14,7 @@ from datetime import datetime
 import hashlib
 import io
 import json
+import base64
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -99,23 +100,35 @@ class RevisionSubmission(BaseModel):
 async def handle_fast_conversational_query(query: str, conversation_history: list = []):
     """Ultra-fast processing for conversational queries with context"""
     try:
+        logger.info(f"🧠 Fast conversational query: '{query}' with {len(conversation_history)} history items")
+        if conversation_history:
+            logger.info(f"📚 Recent context: {[{'Q: ' + h.get('question', '')[:30] + '...', 'A: ' + h.get('answer', '')[:30] + '...'} for h in conversation_history[-3:]]}")
+        
         if not OPENAI_AVAILABLE:
             return {"question": query, "answer": "I'm here and ready to chat! How can I help you today?"}
         
-        # Ultra-short conversational prompt for maximum speed
-        fast_prompt = """You are Pal, a friendly AI assistant. Give very brief, warm conversational responses. Keep it under 20 words and natural. Remember our conversation context.
+        # Ultra-short conversational prompt for maximum speed with enhanced context awareness
+        fast_prompt = """You are a helpful assistant that always remembers prior conversation turns and uses that context to answer follow-up questions accurately, concisely, and with appropriate depth.
+
+CRITICAL: Always analyze the conversation history before answering. For follow-up questions, use the established context.
 
 Examples:
-"Hi" → "Hey there! How's your day going?"
-"How are you?" → "I'm doing great, thanks! How about you?"
-"What's up?" → "Not much, just here ready to help! What's on your mind?"
-"""
+Context: We have been discussing India's geography, including its major rivers, mountains, and cultural landmarks.
+Question: Who is the Prime Minister?
+Assistant's response: The Prime Minister of India is Narendra Modi.
+
+Context: Discussing about probability of getting 4 if dice is thrown
+Assistant's reply: It'll be 1/6
+User's question: Why it cannot be 2?
+Assistant continues with the dice context and explains why the probability cannot be 2/6 for getting specifically a 4.
+
+ALWAYS maintain topic continuity from previous exchanges. If we were discussing a specific country, person, or subject, continue in that context unless explicitly told to change topics."""
         
         # Build messages with conversation history for fast queries too
         messages = [{"role": "system", "content": fast_prompt}]
         
-        # Add last 2 exchanges for context in fast mode
-        for exchange in conversation_history[-2:]:
+        # Add last 25 exchanges for context in fast mode (increased for better continuity)
+        for exchange in conversation_history[-25:]:
             if exchange.get("question") and exchange.get("answer"):
                 messages.append({"role": "user", "content": exchange["question"]})
                 messages.append({"role": "assistant", "content": exchange["answer"]})
@@ -125,8 +138,8 @@ Examples:
         response = openai_client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
-            max_completion_tokens=30,  # Ultra-short for maximum speed
-            temperature=0.9,  # Very decisive
+            max_completion_tokens=400,  # Allow complete answers for conversational queries
+            temperature=0.7,  # Balanced for accuracy and creativity
             top_p=0.8,  # Narrow focus
             frequency_penalty=0.1  # Avoid repetition
         )
@@ -188,6 +201,9 @@ class QuestionRequest(BaseModel):
     is_conversational: bool = False  # Flag to indicate conversational vs educational query
     priority: str = "detailed"  # "fast" for conversations, "detailed" for educational
     conversation_history: list = []  # Previous conversation exchanges for context
+    has_images: bool = False  # Flag to indicate if images are uploaded
+    file_context: list = []  # List of file metadata
+    image_data: list = []  # List of base64 encoded images
 
 class TextToSpeechRequest(BaseModel):
     text: str
@@ -212,6 +228,9 @@ app.add_middleware(
 # Global variable for database connection
 mongo_integration = None
 
+# Temporary image storage for vision analysis (in production, use Redis or similar)
+temp_image_storage = {}
+
 def get_mongo_integration():
     """Lazy initialization of MongoDB integration"""
     global mongo_integration
@@ -224,6 +243,48 @@ def get_mongo_integration():
             logger.error(f"❌ Failed to initialize MongoDB integration: {e}")
             mongo_integration = None
     return mongo_integration
+
+def get_image_data_for_files(file_ids, mongo):
+    """Retrieve actual base64 image data from MongoDB for GPT-4o Vision API"""
+    image_data = []
+    try:
+        if not file_ids:
+            return image_data
+            
+        # Get uploaded files from MongoDB or temp storage
+        for file_id in file_ids:
+            try:
+                # First check temporary storage
+                if file_id in temp_image_storage:
+                    temp_data = temp_image_storage[file_id]
+                    image_data.append({
+                        "filename": temp_data["filename"],
+                        "content_type": temp_data["content_type"],
+                        "base64_data": temp_data["content"],
+                        "id": file_id
+                    })
+                    logger.info(f"📷 Retrieved image from temp storage: {temp_data['filename']}")
+                elif mongo:
+                    # Query MongoDB for the file
+                    doc = mongo.collection.find_one({"metadata.id": file_id})
+                    if doc and doc.get("metadata", {}).get("content_type", "").startswith('image/'):
+                        metadata = doc.get("metadata", {})
+                        if "image_data" in metadata:
+                            image_data.append({
+                                "filename": metadata.get("filename", "image"),
+                                "content_type": metadata.get("content_type", "image/png"),
+                                "base64_data": metadata["image_data"],
+                                "id": file_id
+                            })
+                            logger.info(f"📷 Retrieved image from MongoDB: {metadata.get('filename', 'unknown')}")
+            except Exception as e:
+                logger.error(f"Error retrieving image {file_id}: {e}")
+                continue
+                
+    except Exception as e:
+        logger.error(f"Error in get_image_data_for_files: {e}")
+        
+    return image_data
 
 @app.get("/")
 async def root():
@@ -334,9 +395,21 @@ async def upload_file(
                     status_code=422, 
                     detail=f"Failed to extract PDF content: {str(e)}. Please ensure the PDF contains readable text."
                 )
+        elif file.content_type and file.content_type.startswith('image/'):
+            # Handle image files - store metadata and prepare for GPT-4o vision analysis
+            text_content = f"[IMAGE FILE] {file.filename} - Visual content available for analysis. This image can be analyzed for design elements, educational content, creative work, and visual problem-solving."
+            extraction_info = {
+                "method": "image_processing", 
+                "status": "success", 
+                "type": "image",
+                "vision_ready": True,
+                "size": len(content)
+            }
+            logger.info(f"✅ Image file uploaded for vision analysis: {file.filename} ({file.content_type}, {len(content)} bytes)")
         else:
-            text_content = f"File: {file.filename} ({file.content_type})"
-            extraction_info = {"method": "fallback", "status": "success"}
+            # Handle other file types
+            text_content = f"[FILE] {file.filename} ({file.content_type})"
+            extraction_info = {"method": "metadata_only", "status": "success"}
         
         # Create document metadata
         doc_id = hashlib.md5(content).hexdigest()
@@ -352,23 +425,52 @@ async def upload_file(
             "extraction_info": extraction_info
         }
         
-        # Store in MongoDB
-        result = mongo.add_document(
-            text_content,
-            metadata=document
-        )
+        # Store document and image data in MongoDB with improved error handling
+        try:
+            # For images, also store the binary data for vision API
+            if file.content_type and file.content_type.startswith('image/'):
+                # Store binary image data as base64 for vision API
+                document["image_data"] = base64.b64encode(content).decode('utf-8')
+                document["vision_ready"] = True
+                logger.info(f"📷 Image data encoded for vision API: {file.filename}")
+            
+            result = mongo.add_document(
+                text_content,
+                metadata=document
+            )
+            logger.info(f"✅ Document stored successfully: {file.filename} (ID: {doc_id})")
+        except Exception as mongo_error:
+            logger.error(f"❌ MongoDB storage error: {mongo_error}")
+            # For images, we'll still store them temporarily for vision analysis
+            if file.content_type and file.content_type.startswith('image/'):
+                # Store in memory temporarily
+                temp_image_storage[doc_id] = {
+                    "content": base64.b64encode(content).decode('utf-8'),
+                    "content_type": file.content_type,
+                    "filename": file.filename
+                }
+                logger.info(f"📷 Image stored temporarily for vision analysis: {file.filename}")
+            logger.warning("⚠️ Continuing without MongoDB storage - file uploaded successfully")
         
         return {
             "success": True,
             "document_id": doc_id,
             "filename": file.filename,
             "size": len(content),
+            "content_type": file.content_type,
             "message": "Document uploaded successfully"
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        logger.error(f"Upload error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Upload error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Upload failed - please try again"
+        }
 
 @app.get("/search")
 async def search_documents(q: str, limit: int = 10):
@@ -406,6 +508,8 @@ async def gpt4o_enhanced_chat(request: QuestionRequest):
         
         # Chat mode prompt - optimized for text conversations
         system_prompt = """You are Pal, a caring friend and mentor who speaks with genuine warmth, curiosity, and playful humor. Use short, informal sentences with contractions. Never mention you're an AI or give dry, textbook answers.
+
+CONVERSATION CONTEXT: ALWAYS consider our conversation history when answering questions. If the user asks a follow-up question, answer it in the context of our previous discussion. For example, if we were talking about India and they ask "who was the first president", answer about India's first president, not the USA's.
 
 CHAT MODE INSTRUCTIONS: Provide concise, direct responses optimized for text chat.
 
@@ -502,7 +606,7 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
 @app.post("/ask_question")
 @app.get("/ask_question")
 async def ask_question(request: QuestionRequest = None, question: str = None, q: str = None):
-    """Ask a question using AI - supports both GET (query params) and POST (JSON body)"""
+    """Ask a question using AI with image analysis support - supports both GET (query params) and POST (JSON body)"""
     try:
         # Handle different request formats
         if request and request.question:
@@ -511,6 +615,9 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             is_conversational = getattr(request, 'is_conversational', False)
             priority = getattr(request, 'priority', 'detailed')
             conversation_history = getattr(request, 'conversation_history', [])
+            has_images = getattr(request, 'has_images', False)
+            file_context = getattr(request, 'file_context', [])
+            mode = getattr(request, 'mode', 'pal')  # 'pal' = Learn with Pal, 'book' = My Book
         else:
             # Accept both 'question' and 'q' parameters for GET requests
             query = question or q
@@ -518,6 +625,9 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
             is_conversational = False
             priority = 'detailed'
             conversation_history = []
+            has_images = False
+            file_context = []
+            mode = 'pal'  # Default to Learn with Pal mode
             
         if not query:
             raise HTTPException(status_code=400, detail="Question parameter required")
@@ -549,12 +659,40 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
                          'hey there', "how's it going"]
         is_greeting = any(greeting.lower() in query.lower() for greeting in greeting_words)
         
+        # Route queries based on mode
         if is_greeting:
             # Skip document search for greetings, go straight to AI response
             search_results = []
+        elif mode == 'pal' and ADMIN_SYSTEM_AVAILABLE:
+            # "Learn with Pal" mode - search shared knowledge base
+            logger.info(f"🎓 Learn with Pal mode - searching shared knowledge base")
+            try:
+                search_results = admin_system.semantic_search(
+                    query=query,
+                    top_k=5,
+                    similarity_threshold=0.40  # Lower threshold for hybrid context
+                )
+                # Convert to expected format
+                for result in search_results:
+                    result['source'] = f"{result['source_filename']} (Similarity: {result['similarity_score']:.2%})"
+            except Exception as e:
+                logger.error(f"Semantic search error: {e}")
+                search_results = []
+        elif mode == 'book':
+            # "My Book" mode - search user's personal documents
+            logger.info(f"📚 My Book mode - searching personal documents")
+            try:
+                search_results = mongo.semantic_search(query, top_k=5)
+            except Exception as e:
+                logger.error(f"Book search error: {e}")
+                search_results = []
         else:
-            # Search for relevant documents for non-greeting queries
-            search_results = mongo.semantic_search(query, top_k=5)
+            # Fallback to existing logic
+            try:
+                search_results = mongo.semantic_search(query, top_k=5)
+            except Exception as e:
+                logger.error(f"Fallback search error: {e}")
+                search_results = []
         
         # Filter out corrupted documents containing error messages
         def is_valid_document(doc):
@@ -574,13 +712,60 @@ async def ask_question(request: QuestionRequest = None, question: str = None, q:
         if valid_search_results:
             context = "\n".join([doc.get('content', '') for doc in valid_search_results[:3]])
             
+            # Build source attribution
+            sources = []
+            for doc in valid_search_results[:3]:
+                source_info = f"📄 {doc.get('source_filename', 'Unknown')}"
+                if 'similarity_score' in doc:
+                    source_info += f" (Relevance: {doc['similarity_score']:.0%})"
+                if 'subject' in doc:
+                    source_info += f" - {doc['subject']}"
+                sources.append(source_info)
+            
+            sources_text = "\n".join(sources) if sources else ""
+            
             # Use OpenAI GPT-4o to generate intelligent response
             if OPENAI_AVAILABLE and openai_client:
                 try:
-                    # Voice mode prompt - optimized for spoken conversations
+                    # Enhanced voice mode prompt with superior context awareness
                     system_prompt = """You are Pal, a caring friend and mentor who speaks with genuine warmth, curiosity, and playful humor. Use natural, conversational speech patterns. Never mention you're an AI or give dry, textbook answers.
 
+CRITICAL CONTEXT RULE: You are a helpful assistant that always remembers prior conversation turns and uses that context to answer follow-up questions accurately, concisely, and with appropriate depth.
+
+HYBRID KNOWLEDGE APPROACH: You have access to BOTH uploaded educational materials AND your own general knowledge. Use them intelligently together:
+
+1. **High Relevance (>60% match)**: Primarily use the uploaded content, supplement with your knowledge only if needed
+2. **Medium Relevance (40-60% match)**: Blend both sources - use uploaded content for specific concepts, add your knowledge for broader context
+3. **Low/No Relevance (<40% or no results)**: Rely on your general knowledge, but mention if the topic isn't covered in their materials
+
+When blending sources:
+- Start with concepts from uploaded materials when available
+- Naturally extend with your own knowledge for complete explanations
+- Don't say "According to the uploaded material..." unless the relevance is low - just explain naturally
+- If using mostly your knowledge, you can briefly note: "This isn't directly covered in your study material, but..."
+
+Examples:
+Context: We have been discussing India's geography, including its major rivers, mountains, and cultural landmarks.
+Question: Who is the Prime Minister?
+Assistant's response: The Prime Minister of India is Narendra Modi.
+
+Context: Discussing about probability of getting 4 if dice is thrown
+Assistant's reply: It'll be 1/6
+User's question: Why it cannot be 2?
+Assistant continues with the dice context and explains probability.
+
+ALWAYS maintain topic continuity from previous exchanges. If we were discussing a specific country, person, or subject, continue in that context unless explicitly told to change topics.
+
 VOICE MODE INSTRUCTIONS: Provide responses optimized for speech. Use natural, flowing language that sounds conversational when spoken aloud. NO parenthetical cues or tone instructions in your responses.
+
+IMAGE AND FILE ANALYSIS: When users upload images and ask questions about them:
+- You CAN see and analyze uploaded images - provide detailed visual analysis
+- For t-shirt/clothing designs: Comment specifically on colors, graphics, typography, layout, style, and creativity
+- For educational content: Analyze diagrams, solve problems, explain visual elements step-by-step
+- For creative work: Give detailed feedback on composition, design elements, artistic choices
+- Be specific about what you observe: colors, shapes, text, layout, proportions, style elements
+- Provide constructive suggestions and ask thoughtful follow-up questions
+- Show enthusiasm and genuine interest in their creative work or educational content
 
 MATH FORMATTING: Never use LaTeX notation or backslashes. Use plain text for all mathematical expressions:
 - Instead of \\( \\sin^2 \\theta + \\cos^2 \\theta \\), say "sine squared theta plus cosine squared theta"
@@ -650,20 +835,89 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                     messages = [{"role": "system", "content": system_prompt}]
                     
                     # Add conversation history for context
-                    for exchange in conversation_history[-3:]:  # Last 3 exchanges for context
+                    for exchange in conversation_history[-30:]:  # Last 30 exchanges for context
                         if exchange.get("question") and exchange.get("answer"):
                             messages.append({"role": "user", "content": exchange["question"]})
                             messages.append({"role": "assistant", "content": exchange["answer"]})
                     
-                    # Add current question
-                    messages.append({"role": "user", "content": query})
+                    # GPT-4o Vision API implementation
+                    if has_images and file_context:
+                        image_files = [f for f in file_context if f.get('type') == 'image']
+                        
+                        if image_files:
+                            # Get actual image data from uploaded files
+                            retrieved_images = get_image_data_for_files(uploaded_files, mongo)
+                            
+                            # Enhanced analysis context based on query
+                            analysis_context = ""
+                            if "design" in query.lower() or "tshirt" in query.lower() or "shirt" in query.lower():
+                                analysis_context = "Looking at this design, I can provide feedback on the visual elements, creativity, colors, typography, and overall aesthetic appeal."
+                            elif "homework" in query.lower() or "problem" in query.lower() or "math" in query.lower():
+                                analysis_context = "I can analyze this educational content and help solve or explain it step by step."
+                            else:
+                                analysis_context = "I can analyze the visual content in this image and provide detailed feedback."
+                            
+                            # Implement proper GPT-4o Vision API with actual image data
+                            if retrieved_images:
+                                # Create proper GPT-4o Vision API message format
+                                content_parts = [
+                                    {
+                                        "type": "text",
+                                        "text": query
+                                    }
+                                ]
+                                
+                                # Add each image to the content
+                                for img in retrieved_images:
+                                    content_parts.append({
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:{img['content_type']};base64,{img['base64_data']}"
+                                        }
+                                    })
+                                
+                                messages.append({
+                                    "role": "user", 
+                                    "content": content_parts
+                                })
+                                
+                                logger.info(f"📷 Sending {len(retrieved_images)} images to GPT-4o Vision API")
+                            else:
+                                # Fallback if no image data retrieved
+                                enhanced_query = f"{query}\n\n{analysis_context}\n\nI'm having trouble accessing the image data. Could you describe what you see in the image so I can help you better?"
+                                messages.append({"role": "user", "content": enhanced_query})
+                        else:
+                            # Handle non-image files
+                            file_descriptions = [f"📄 {f.get('name', 'unnamed')}" for f in file_context]
+                            user_message_content = f"{query}\n\n[Files uploaded: {', '.join(file_descriptions)}]"
+                            messages.append({"role": "user", "content": user_message_content})
+                    else:
+                        # Regular text message with context
+                        # Include relevance info to help GPT-4 blend sources appropriately
+                        if valid_search_results and len(valid_search_results) > 0:
+                            avg_similarity = sum(doc.get('similarity_score', 0) for doc in valid_search_results[:3]) / min(3, len(valid_search_results))
+                            context_note = ""
+                            if avg_similarity >= 0.6:
+                                context_note = "[Context: High relevance from uploaded materials]\n\n"
+                            elif avg_similarity >= 0.4:
+                                context_note = "[Context: Partial match in uploaded materials - blend with general knowledge]\n\n"
+                            else:
+                                context_note = "[Context: Weak match in uploaded materials - rely more on general knowledge]\n\n"
+                            
+                            user_message_content = f"{context_note}Question: {query}\n\nRelevant context from uploaded materials:\n{context}\n\nProvide a comprehensive answer blending the above context with your knowledge."
+                        else:
+                            user_message_content = query
+                        
+                        messages.append({"role": "user", "content": user_message_content})
                     
                     logger.info(f"🧠 Sending {len(messages)} messages to GPT-4o (including {len(conversation_history)} history exchanges)")
+                    logger.info(f"📷 Image analysis requested: {has_images}")
+                    logger.info(f"📁 File context: {file_context}")
                     
                     response = openai_client.chat.completions.create(
-                        model="gpt-4o",  # Using GPT-4o
+                        model="gpt-4o",  # Using GPT-4o with vision capabilities
                         messages=messages,
-                        max_completion_tokens=150,  # Balanced for speed and quality
+                        max_completion_tokens=800 if has_images else 600,  # More tokens for complete answers
                         temperature=0.7,  # Balanced responses
                         top_p=0.9  # Focus on likely responses
                     )
@@ -683,6 +937,20 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                     # Voice mode prompt - optimized for spoken conversations (fallback mode)
                     system_prompt = """You are Pal, a caring friend and mentor who speaks with genuine warmth, curiosity, and playful humor. Use natural, conversational speech patterns. Never mention you're an AI or give dry, textbook answers.
 
+CRITICAL CONTEXT RULE: You are a helpful assistant that always remembers prior conversation turns and uses that context to answer follow-up questions accurately, concisely, and with appropriate depth.
+
+Examples:
+Context: We have been discussing India's geography, including its major rivers, mountains, and cultural landmarks.
+Question: Who is the Prime Minister?
+Assistant's response: The Prime Minister of India is Narendra Modi.
+
+Context: Discussing about probability of getting 4 if dice is thrown
+Assistant's reply: It'll be 1/6
+User's question: Why it cannot be 2?
+Assistant continues with the dice context and explains probability.
+
+ALWAYS maintain topic continuity from previous exchanges. If we were discussing a specific country, person, or subject, continue in that context unless explicitly told to change topics.
+
 VOICE MODE INSTRUCTIONS: Provide responses optimized for speech. Use natural, flowing language that sounds conversational when spoken aloud. NO parenthetical cues or tone instructions in your responses.
 
 MATH FORMATTING: Never use LaTeX notation or backslashes. Use plain text for all mathematical expressions:
@@ -753,7 +1021,7 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                     messages = [{"role": "system", "content": system_prompt}]
                     
                     # Add conversation history for context
-                    for exchange in conversation_history[-3:]:  # Last 3 exchanges for context
+                    for exchange in conversation_history[-30:]:  # Last 30 exchanges for context
                         if exchange.get("question") and exchange.get("answer"):
                             messages.append({"role": "user", "content": exchange["question"]})
                             messages.append({"role": "assistant", "content": exchange["answer"]})
@@ -761,12 +1029,12 @@ Pal: You've got this—what part feels tricky right now? Let's break it down ste
                     # Add current question
                     messages.append({"role": "user", "content": query})
                     
-                    logger.info(f"🧠 Sending {len(messages)} messages to GPT-4o (including {len(conversation_history)} history exchanges)")
+                    logger.info(f"🧠 Sending {len(messages)} messages to GPT-4o (including last {min(30, len(conversation_history))} of {len(conversation_history)} history exchanges)")
                     
                     response = openai_client.chat.completions.create(
                         model="gpt-4o",  # Using GPT-4o
                         messages=messages,
-                        max_completion_tokens=180,  # Optimized for 2-second responses
+                        max_completion_tokens=600,  # Sufficient for complete educational answers
                         temperature=0.7,  # Balanced for quality and speed
                         top_p=0.9  # Focus on most likely responses
                     )
@@ -1295,6 +1563,382 @@ async def get_speech_status():
             "error": str(e)
         })
 
+# ========================================
+# ADMIN ENDPOINTS - Shared Knowledge Base
+# ========================================
+
+# Initialize admin training system
+try:
+    from admin_training import AdminTrainingSystem
+    mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/')
+    openai_key = os.getenv('OPENAI_API_KEY')
+    
+    # Initialize with OpenAI key for embeddings
+    admin_system = AdminTrainingSystem(
+        mongo_uri=mongo_uri,
+        openai_api_key=openai_key
+    )
+    ADMIN_SYSTEM_AVAILABLE = True
+    
+    if admin_system.embeddings_enabled:
+        logger.info("✅ Admin training system initialized with vector embeddings")
+    else:
+        logger.info("✅ Admin training system initialized (embeddings disabled)")
+except Exception as e:
+    logger.warning(f"⚠️ Admin training system not available: {e}")
+    ADMIN_SYSTEM_AVAILABLE = False
+    admin_system = None
+
+class AdminUploadRequest(BaseModel):
+    tags: Dict[str, Any]
+    description: Optional[str] = ""
+    admin_id: str
+
+class BulkUploadRequest(BaseModel):
+    uploads: List[Dict[str, Any]]
+    admin_id: str
+
+@app.post("/admin/train/upload", tags=["Admin"])
+async def admin_upload_pdf(
+    file: UploadFile = File(...),
+    tags: str = Form(...),
+    admin_id: str = Form(...),
+    description: str = Form("")
+):
+    """
+    Admin endpoint: Upload PDF file to shared knowledge base with tags
+    
+    Tags format (JSON string):
+    {
+        "exam_type": ["JEE", "NEET"],
+        "subject": "Physics",
+        "topic": "Thermodynamics",
+        "chapter": "Heat Transfer",
+        "difficulty": "intermediate",
+        "class": "11th",
+        "language": "English"
+    }
+    """
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        # Parse tags from JSON string
+        tags_dict = json.loads(tags)
+        
+        # Upload to shared knowledge base
+        result = await admin_system.upload_shared_pdf(
+            file=file,
+            tags=tags_dict,
+            admin_id=admin_id,
+            description=description
+        )
+        
+        return JSONResponse(content=result)
+        
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid tags JSON format")
+    except Exception as e:
+        logger.error(f"Admin upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/train/url", tags=["Admin"])
+async def admin_upload_pdf_url(request: Request):
+    """
+    Admin endpoint: Add PDF from public URL to shared knowledge base
+    
+    Request body:
+    {
+        "url": "https://example.com/jee_physics.pdf",
+        "tags": {
+            "exam_type": ["JEE"],
+            "subject": "Physics",
+            "topic": "Thermodynamics",
+            "difficulty": "intermediate",
+            "class": "11th",
+            "language": "English"
+        },
+        "admin_id": "admin123",
+        "description": "JEE Physics - Thermodynamics Chapter"
+    }
+    """
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        body = await request.json()
+        
+        result = await admin_system.upload_shared_pdf_url(
+            url=body["url"],
+            tags=body["tags"],
+            admin_id=body["admin_id"],
+            description=body.get("description", "")
+        )
+        
+        return JSONResponse(content=result)
+        
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Missing required field: {e}")
+    except Exception as e:
+        logger.error(f"Admin URL upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/train/bulk_urls", tags=["Admin"])
+async def admin_bulk_upload_urls(request: Request):
+    """
+    Admin endpoint: Bulk upload multiple PDFs from URLs
+    
+    Request body:
+    {
+        "uploads": [
+            {
+                "url": "https://example.com/jee_physics.pdf",
+                "tags": {"exam_type": ["JEE"], "subject": "Physics"},
+                "description": "JEE Physics Chapter 1"
+            },
+            {
+                "url": "https://example.com/neet_biology.pdf",
+                "tags": {"exam_type": ["NEET"], "subject": "Biology"},
+                "description": "NEET Biology Chapter 1"
+            }
+        ],
+        "admin_id": "admin123"
+    }
+    """
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        body = await request.json()
+        
+        result = await admin_system.bulk_upload_urls(
+            uploads=body["uploads"],
+            admin_id=body["admin_id"]
+        )
+        
+        return JSONResponse(content=result)
+        
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Missing required field: {e}")
+    except Exception as e:
+        logger.error(f"Bulk upload error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/tags", tags=["Admin"])
+async def get_available_tags():
+    """Get all available tags in the shared knowledge base"""
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        tags = admin_system.get_available_tags()
+        return JSONResponse(content=tags)
+    except Exception as e:
+        logger.error(f"Get tags error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/documents", tags=["Admin"])
+async def get_uploaded_documents():
+    """Get list of unique uploaded PDF files with metadata"""
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        # Get unique documents by grouping by file_hash
+        pipeline = [
+            {
+                "$group": {
+                    "_id": "$file_hash",
+                    "filename": {"$first": "$source_filename"},
+                    "exam_types": {"$first": "$tags.exam_type"},
+                    "subject": {"$first": "$tags.subject"},
+                    "topic": {"$first": "$tags.topic"},
+                    "admin_id": {"$first": "$admin_id"},
+                    "uploaded_at": {"$first": "$uploaded_at"},
+                    "total_chunks": {"$sum": 1},
+                    "has_embeddings": {"$sum": {"$cond": [{"$ne": ["$embedding", None]}, 1, 0]}}
+                }
+            },
+            {"$sort": {"uploaded_at": -1}}
+        ]
+        
+        documents = list(admin_system.shared_knowledge.aggregate(pipeline))
+        
+        # Convert ObjectId and datetime to strings
+        for doc in documents:
+            doc["file_hash"] = doc.pop("_id")  # Rename _id to file_hash
+            if "uploaded_at" in doc and doc["uploaded_at"]:
+                doc["uploaded_at"] = doc["uploaded_at"].isoformat() if hasattr(doc["uploaded_at"], 'isoformat') else str(doc["uploaded_at"])
+        
+        return JSONResponse(content={
+            "documents": documents,
+            "total": len(documents)
+        })
+    except Exception as e:
+        logger.error(f"Get documents error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/admin/documents/{file_hash}", tags=["Admin"])
+async def delete_document(file_hash: str):
+    """Delete all chunks belonging to a document by file_hash"""
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        # Delete all chunks with this file_hash
+        result = admin_system.shared_knowledge.delete_many({"file_hash": file_hash})
+        
+        logger.info(f"Deleted document with file_hash: {file_hash}, chunks removed: {result.deleted_count}")
+        
+        return JSONResponse(content={
+            "success": True,
+            "deleted_chunks": result.deleted_count,
+            "message": f"Successfully deleted {result.deleted_count} chunks"
+        })
+    except Exception as e:
+        logger.error(f"Delete document error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/stats", tags=["Admin"])
+async def get_content_stats(
+    exam_type: Optional[str] = None,
+    subject: Optional[str] = None
+):
+    """Get statistics about shared knowledge base with optional filters"""
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        filters = {}
+        if exam_type:
+            filters["tags.exam_type"] = exam_type
+        if subject:
+            filters["tags.subject"] = subject
+        
+        stats = admin_system.get_content_stats(filters)
+        return JSONResponse(content=stats)
+    except Exception as e:
+        logger.error(f"Get stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/content/search", tags=["Admin"])
+async def search_shared_content(
+    query: str,
+    exam_type: Optional[str] = None,
+    subject: Optional[str] = None,
+    topic: Optional[str] = None,
+    limit: int = 10,
+    use_semantic: bool = True
+):
+    """
+    Search shared knowledge base with filters
+    
+    Args:
+        query: Search query text
+        exam_type: Filter by exam type (JEE, NEET, etc.)
+        subject: Filter by subject
+        topic: Filter by topic
+        limit: Max results (default 10)
+        use_semantic: Use semantic search if available (default True)
+    """
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        filters = {}
+        if exam_type:
+            filters["exam_type"] = exam_type
+        if subject:
+            filters["subject"] = subject
+        if topic:
+            filters["topic"] = topic
+        
+        # Use semantic search if enabled and requested
+        if use_semantic and admin_system.embeddings_enabled:
+            results = admin_system.semantic_search(
+                query=query,
+                filters=filters,
+                limit=limit
+            )
+            search_method = "semantic"
+        else:
+            results = admin_system.query_shared_knowledge(
+                query=query,
+                filters=filters,
+                limit=limit
+            )
+            search_method = "keyword"
+        
+        # Convert ObjectId to string and remove large embedding arrays
+        for result in results:
+            result["_id"] = str(result["_id"])
+            # Convert datetime objects to ISO format strings
+            if "uploaded_at" in result:
+                result["uploaded_at"] = result["uploaded_at"].isoformat() if hasattr(result["uploaded_at"], 'isoformat') else str(result["uploaded_at"])
+            # Remove embedding from response (too large)
+            if "embedding" in result:
+                result["has_embedding"] = True
+                del result["embedding"]
+        
+        return JSONResponse(content={
+            "results": results,
+            "count": len(results),
+            "search_method": search_method,
+            "embeddings_available": admin_system.embeddings_enabled
+        })
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/embeddings/regenerate", tags=["Admin"])
+async def regenerate_embeddings(batch_size: int = 100):
+    """
+    Regenerate embeddings for existing content without embeddings
+    Useful when enabling embeddings on existing database
+    
+    Args:
+        batch_size: Number of documents to process (default 100)
+    """
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    if not admin_system.embeddings_enabled:
+        raise HTTPException(
+            status_code=400,
+            detail="Embeddings not enabled. Configure OPENAI_API_KEY to enable."
+        )
+    
+    try:
+        result = admin_system.regenerate_embeddings(batch_size=batch_size)
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Embedding regeneration error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/embeddings/status", tags=["Admin"])
+async def embeddings_status():
+    """Get status of embeddings in the knowledge base"""
+    if not ADMIN_SYSTEM_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Admin system not available")
+    
+    try:
+        total_docs = admin_system.shared_knowledge.count_documents({})
+        with_embeddings = admin_system.shared_knowledge.count_documents({
+            "embedding": {"$exists": True}
+        })
+        without_embeddings = total_docs - with_embeddings
+        
+        return JSONResponse(content={
+            "embeddings_enabled": admin_system.embeddings_enabled,
+            "total_documents": total_docs,
+            "with_embeddings": with_embeddings,
+            "without_embeddings": without_embeddings,
+            "coverage_percentage": round((with_embeddings / total_docs * 100), 2) if total_docs > 0 else 0
+        })
+    except Exception as e:
+        logger.error(f"Embeddings status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     
@@ -1305,6 +1949,7 @@ if __name__ == "__main__":
     print("  • Semantic search with AI embeddings")
     print(f"  • OpenAI GPT integration {'✅' if OPENAI_AVAILABLE else '❌'}")
     print(f"  • Azure Speech Services {'✅' if SPEECH_AVAILABLE else '❌'}")
+    print(f"  • Admin Training System {'✅' if ADMIN_SYSTEM_AVAILABLE else '❌'}")
     print("  • PDF URL training system")
     print("  • Background task processing")
     print("  • Batch training support")

@@ -11,9 +11,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ricky0123/vad-web": "^0.0.28",
+    "firebase": "^12.4.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.30.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "microsoft-cognitiveservices-speech-sdk": "^1.30.0"
+    "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",

@@ -1,0 +1,209 @@
+/* Admin Dashboard Styles */
+
+.admin-dashboard {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f5f7fa;
+}
+
+/* Header */
+.admin-header {
+  background: white;
+  padding: 20px 40px;
+  border-bottom: 2px solid #e1e8ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.header-left h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #667eea;
+  font-weight: 700;
+}
+
+.subtitle {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-email {
+  font-size: 14px;
+  color: #555;
+  font-weight: 500;
+}
+
+.user-badge {
+  padding: 4px 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.logout-btn {
+  padding: 8px 20px;
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+
+/* Navigation Tabs */
+.admin-nav {
+  background: white;
+  padding: 0 40px;
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid #e1e8ed;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.tab-btn {
+  padding: 16px 24px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #666;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  position: relative;
+  top: 2px;
+}
+
+.tab-btn:hover {
+  color: #667eea;
+  background: #f8f9ff;
+}
+
+.tab-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  background: #f8f9ff;
+}
+
+.tab-icon {
+  font-size: 20px;
+}
+
+.tab-label {
+  font-weight: 600;
+}
+
+/* Main Content */
+.admin-content {
+  flex: 1;
+  padding: 32px 40px;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Footer */
+.admin-footer {
+  background: white;
+  border-top: 2px solid #e1e8ed;
+  padding: 20px 40px;
+  text-align: center;
+  color: #666;
+  font-size: 14px;
+}
+
+.admin-footer p {
+  margin: 0 0 8px 0;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  color: #667eea;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.footer-links span {
+  color: #ccc;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-header {
+    flex-direction: column;
+    gap: 16px;
+    padding: 20px;
+    align-items: stretch;
+  }
+
+  .header-left,
+  .header-right {
+    justify-content: center;
+    text-align: center;
+  }
+
+  .header-right {
+    flex-direction: column;
+  }
+
+  .admin-nav {
+    padding: 0 20px;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    padding: 14px 16px;
+    font-size: 14px;
+  }
+
+  .tab-icon {
+    font-size: 18px;
+  }
+
+  .admin-content {
+    padding: 24px 20px;
+  }
+
+  .admin-footer {
+    padding: 16px 20px;
+  }
+}

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>HighPal Wake Word Diagnostic</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; }
+    h1 { color: #7c4afd; }
+    .log { background:#111; color:#0f0; padding:12px; height:300px; overflow:auto; font-family: monospace; font-size:12px; }
+    button { margin-right: 12px; padding:8px 16px; }
+    .status { margin:12px 0; padding:8px; background:#f5f5f5; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>HighPal Wake Word Diagnostic</h1>
+  <p>This standalone page helps test browser wake word passive recognition without launching the full app.</p>
+  <div class="status" id="status">Idle</div>
+  <div>
+    <button id="start">Start Passive Listening</button>
+    <button id="stop">Stop Passive Listening</button>
+    <button id="clear">Clear Log</button>
+  </div>
+  <h3>Log</h3>
+  <div class="log" id="log"></div>
+  <script>
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+  const wakeWords = ['pal','paul','pell','pale','pail','pow','pol','paal','pahl','listen','listenpal'];
+    let recognition = null;
+
+    function log(msg){
+      const time = new Date().toISOString().substr(11,8);
+      logEl.textContent += `[${time}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+      console.log(msg);
+    }
+
+    function start(){
+      if(!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)){
+        log('SpeechRecognition API not supported in this browser');
+        return;
+      }
+      if(recognition){ recognition.stop(); recognition = null; }
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SR();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.maxAlternatives = 3;
+
+      recognition.onstart = () => { statusEl.textContent='Listening for wake word...'; log('PASSIVE LISTENING STARTED'); };
+      recognition.onerror = (e)=> log('Error: '+ e.error);
+      recognition.onend = ()=> { statusEl.textContent='Stopped'; log('Recognition ended'); };
+      recognition.onresult = (event) => {
+        let finalTxt=''; let interim='';
+        for(let i=event.resultIndex; i<event.results.length; i++){
+          const t = event.results[i][0].transcript;
+            if(event.results[i].isFinal) finalTxt += t; else interim += t;
+        }
+        const combined = (finalTxt+' '+interim).toLowerCase().trim();
+        if(!combined) return;
+        log('Heard: "'+combined+'"');
+        const tokens = combined.split(/\s+/);
+        // Merge bigram "listen pal" into single token to align with app logic
+        for(let i=0;i<tokens.length-1;i++){
+          if(tokens[i]==='listen' && tokens[i+1]==='pal'){
+            tokens.push('listenpal');
+            break;
+          }
+        }
+        // basic fuzzy match distance <=1
+        const dist = (a,b)=>{const m=a.length,n=b.length;const dp=Array.from({length:m+1},()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++){for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);} }return dp[m][n];};
+        let detected=false;
+        outer: for(const tok of tokens){
+          for(const w of wakeWords){
+            const d=dist(tok,w); if(d<=1){ detected=true; log('WAKE WORD DETECTED: '+ w +' (heard '+tok+')'); break outer; }
+          }
+        }
+        if(!detected){ log('No wake word in: '+combined); }
+      };
+      try { recognition.start(); } catch(e){ log('Start error: '+ e.message); }
+    }
+
+    function stop(){ if(recognition){ try{ recognition.stop(); }catch{} recognition=null; statusEl.textContent='Stopped'; }}
+
+    document.getElementById('start').onclick=start;
+    document.getElementById('stop').onclick=stop;
+    document.getElementById('clear').onclick=()=>{ logEl.textContent=''; };
+  </script>
+</body>
+</html>

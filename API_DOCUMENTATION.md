@@ -1,22 +1,24 @@
 # 📡 HighPal API Documentation
 
-**Version:** 4.0.0  
-**Base URL:** `http://localhost:8000`  
-**Server:** FastAPI with emotional intelligence and Azure Speech Services integration
+**Version:** 5.0.0+  
+**Base URL:** `http://localhost:8003`  
+**Server:** FastAPI with advanced conversation management and emotional intelligence integration
+**Status:** Production-Ready with Advanced Features
+**Last Updated:** September 27, 2025
 
 ---
 
 ## 🌐 API Overview
 
-HighPal provides a RESTful API for emotionally intelligent educational assistance with enterprise-grade voice processing. The API supports dual learning modes, Azure Speech Services integration, real-time emotion detection, and adaptive learning responses.
+HighPal provides a comprehensive RESTful API for advanced educational assistance with sophisticated conversation management, voice processing, and intelligent document handling. The API supports dual learning modes, persistent conversation history, advanced voice interaction, and comprehensive revision systems.
 
 ### Architecture
-- **Orchestration Layer**: FastAPI routing with emotional intelligence processing
-- **Pal Engine**: Emotionally aware exam preparation and open conversations
-- **Book Engine**: Document-focused learning with emotional context
-- **Voice Engine**: Azure Speech Services for STT/TTS with emotional expressiveness
-- **Emotion Engine**: Azure Text Analytics integration for real-time emotion detection
-- **Memory Engine**: Emotional state tracking and personalized learning patterns using Azure insights
+- **Advanced Orchestration Layer**: FastAPI with sophisticated conversation management and voice processing
+- **Pal Engine**: Intelligent exam preparation and educational conversations with context awareness
+- **Book Engine**: Comprehensive document processing with quiz generation and revision capabilities
+- **Conversation Engine**: Persistent conversation history with intelligent management and deduplication
+- **Voice Processing Engine**: Advanced voice interaction with barge-in detection and mathematical speech processing
+- **Memory Engine**: Conversation state tracking and intelligent context preservation
 
 ### Voice Processing Pipeline
 - **Azure STT**: Convert student speech to text with high accuracy

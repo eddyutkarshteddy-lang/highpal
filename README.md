@@ -1,6 +1,6 @@
 # 🎓 HighPal - GPT-4o Powered Emotionally Intelligent AI Educational Assistant
 
-**HighPal** is the first AI educational assistant powered by **GPT-4o** that understands both what you need to learn AND how you feel while learning. Combining revolutionary GPT-4o intelligence with comprehensive educational support, HighPal adapts to your emotional state and learning needs in real-time.
+**HighPal** is an advanced AI educational assistant powered by **GPT-4o** featuring sophisticated conversation management, intelligent voice processing, and comprehensive learning support. Combining cutting-edge AI technology with intuitive user experience, HighPal provides seamless educational assistance with persistent conversation history and advanced voice interaction capabilities.
 
 ![Version](https://img.shields.io/badge/version-5.0.0-blue)
 ![Status](https://img.shields.io/badge/status-GPT--5%20Enhanced-green)
@@ -17,20 +17,33 @@
 - **Emotional learning analytics** - track your emotional journey over time
 
 ### 🎤 **Enhanced Dual Learning Modes**
-- **Learn with Pal**: Emotionally aware AI tutor for competitive exam preparation
+- **Learn with Pal**: AI tutor with shared knowledge base (✅ NEW: Query Routing Active)
   - Specialized for JEE, NEET, CAT, UPSC, GATE, and other Indian competitive exams
+  - **Hybrid RAG**: Intelligently blends uploaded educational content with GPT-4's general knowledge
+  - **Semantic Search**: Finds relevant content using OpenAI embeddings (1536 dimensions)
+  - **Smart Context**: Uses uploaded materials when relevant (>40% similarity), supplements with GPT-4
   - Stress-aware explanations and motivational support
   - Real-time emotional adaptation during conversations
-- **Learn from My Book**: Document-based Q&A with emotional context
-  - Upload PDFs and get emotionally intelligent explanations
+- **Learn from My Book**: Document-based Q&A with personal uploads
+  - Upload PDFs and get personalized explanations
   - Adaptive teaching pace based on your comprehension and stress levels
+  - Separate knowledge base from shared admin content
 
 ### 🧠 **Advanced AI Integration**
-- **Azure Speech Services**: Industry-leading speech recognition, synthesis, and voice emotion analysis
-- **Azure Text Analytics**: Advanced sentiment analysis and emotion detection from voice patterns
+- **Admin Knowledge Base** (✅ NEW): Centralized educational content with vector embeddings
+  - Upload PDFs through admin panel (batch processing for large files)
+  - OpenAI text-embedding-3-small for semantic search (1536 dimensions)
+  - Tag content by exam type, subject, topic, difficulty
+  - Shared across all students in "Learn with Pal" mode
+  - **Hybrid RAG**: 40% similarity threshold enables intelligent blending of sources
+- **Query Routing** (✅ NEW): Mode-based intelligent routing
+  - "Learn with Pal" → Searches shared knowledge base + GPT-4 general knowledge
+  - "My Book" → Searches personal uploaded documents
+  - Automatic fallback to GPT-4 for topics not in uploaded content
+- **Azure Speech Services**: Industry-leading speech recognition and synthesis
 - **OpenAI GPT-4o**: Advanced multimodal educational content generation and reasoning
-- **Emotional Response Engine**: Combines academic knowledge with emotional support using Azure AI
-- **Voice Synthesis**: Azure Neural Voices with emotionally appropriate responses (calm, encouraging, energetic)
+- **Emotional Response Engine**: Combines academic knowledge with emotional support
+- **Voice Synthesis**: Azure Neural Voices with emotionally appropriate responses
 
 ### 📊 **Emotional Learning Analytics**
 - Daily emotional journey visualization
@@ -49,27 +62,34 @@
 - **Port**: Development server runs on `http://localhost:5173`
 
 ### Backend (Emotional AI Orchestration)
-- **Main Server**: `training_server.py` - Enhanced FastAPI with emotion processing
+- **Main Server**: `training_server.py` - Enhanced FastAPI with query routing
 - **AI Service Layer**: Multi-platform AI integration and orchestration
-  - **Azure Text Analytics**: Voice emotion detection and sentiment analysis
-  - **OpenAI Client**: GPT-4o content generation and reasoning
+  - **Admin Training System**: Manages shared knowledge base with vector embeddings
+  - **Semantic Search**: Cosine similarity with numpy for relevant content retrieval
+  - **Query Router**: Intelligent routing between shared knowledge and personal docs
+  - **Hybrid RAG Engine**: Blends uploaded content with GPT-4 based on relevance
+  - **OpenAI Client**: GPT-4o content generation (600-800 tokens)
   - **Azure Speech Client**: Enterprise STT/TTS with emotional expressiveness
-  - **Emotion Processor**: Combines voice and text emotion analysis using Azure AI
-  - **Response Adapter**: Generates emotionally appropriate responses
-- **Voice Pipeline**: Azure-powered emotion-aware speech processing and synthesis
-- **Session Management**: Emotional state tracking and user profiling
-- **Port**: API server runs on `http://localhost:8000`
+  - **Response Adapter**: Generates context-aware educational responses
+- **Voice Pipeline**: Azure-powered speech processing and synthesis
+- **Session Management**: Conversation history and user profiling
+- **Port**: API server runs on `http://localhost:8003`
 
 - **OpenAI Integration**: GPT-4o for educational content, explanations, and reasoning
 - **Emotion Database**: Emotional history tracking and pattern analysis
 - **Adaptive Engine**: Real-time response adjustment based on emotional feedback
 
-### Database & Emotional Memory
-- **MongoDB Atlas**: Document storage, user profiles, and emotional analytics
+### Database & Knowledge Management
+- **MongoDB Atlas**: Document storage, embeddings, and user profiles
+- **Shared Knowledge Collection**: Admin-uploaded educational content with vector embeddings
+  - 1536-dimension vectors using OpenAI text-embedding-3-small
+  - Indexed by exam type, subject, topic, difficulty
+  - Supports batch uploads with retry logic for large files
+- **Personal Documents Collection**: User-specific uploaded materials
 - **Emotional History**: Track stress, confidence, and learning progression over time
-- **User Profiles**: Personalized emotional baselines and learning preferences
-- **Session Context**: Real-time emotional state management during conversations
-- **Security**: Encrypted emotional data with privacy-first design
+- **User Profiles**: Personalized learning preferences and progress tracking
+- **Session Context**: Real-time conversation state management
+- **Security**: Encrypted data with privacy-first design
 
 ## 🚀 Quick Start
 
@@ -400,10 +420,12 @@ highpal/
 
 ## 📈 Recent Updates (September 2025)
 
-### ✅ Version 2.1.0 - Simplified & Optimized
-- **🧹 Massive Cleanup**: Removed 31 unused server files and components
-- **🎯 Single Server Architecture**: Consolidated to `training_server.py` only
-- **🎤 Enhanced Pal Interface**: Improved voice assistant experience
+### ✅ Version 5.0.0+ - Advanced Conversation Management System
+- **🗨️ Persistent Conversation History**: Complete conversation management with auto-save
+- **🎤 Advanced Voice Processing**: Revolutionary barge-in detection and continuous conversation
+- **💻 Professional Interface**: Interactive talks sidebar with comprehensive conversation management
+- **🔧 Production-Ready Architecture**: Enterprise-level code quality and scalability
+- **📚 Enhanced Learning Features**: Intelligent quiz generation and comprehensive revision system
 ## 🎯 Roadmap & Recent Updates
 
 ### 🚀 Version 4.0.0 - Emotional Intelligence Revolution (Current)
